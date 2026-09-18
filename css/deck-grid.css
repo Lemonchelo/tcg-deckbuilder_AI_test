@@ -1,24 +1,50 @@
 /* ==========================================================================
    DECK SECTION, MAIN DECK (40 CARDS) & AUTOMATED EXTRA DECK (TOKENS)
+   Aesthetic: Holographic Duel Disk / Tactical HUD
    ========================================================================== */
 
 .deck-section {
   display: flex;
   flex-direction: column;
   height: 100%;
-  border-right: 1px solid var(--border-subtle);
-  background: rgba(10, 14, 26, 0.45);
+  border-right: 1px solid var(--border-soft);
+  background: rgba(2, 5, 12, 0.55);
   position: relative;
   overflow: hidden;
 }
 
-/* Deck Header Analytics Panel */
+/* Vertical accent line on right border */
+.deck-section::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(180deg, transparent, var(--cyan-dim) 30%, var(--cyan-dim) 70%, transparent);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ── Deck Header Analytics Panel ─────────────────────────────────────────── */
 .deck-header-panel {
-  padding: 12px 18px;
-  background: var(--bg-surface-glass);
-  border-bottom: 1px solid var(--border-subtle);
-  backdrop-filter: blur(14px);
+  padding: 10px 16px;
+  background: rgba(2, 8, 20, 0.92);
+  border-bottom: 1px solid var(--border-soft);
+  backdrop-filter: blur(12px);
   z-index: 10;
+  position: relative;
+}
+
+.deck-header-panel::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan-dim), transparent);
+  opacity: 0.5;
 }
 
 .analytics-row {
@@ -28,7 +54,7 @@
   align-items: center;
 }
 
-/* Mana Curve Box */
+/* ── Mana Curve ──────────────────────────────────────────────────────────── */
 .mana-curve-box {
   display: flex;
   flex-direction: column;
@@ -39,24 +65,26 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 10.5px;
+  font-family: var(--font-hud);
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.75px;
+  letter-spacing: 1.5px;
   color: var(--text-muted);
   font-weight: 700;
 }
 
 .avg-mana {
-  color: #38bdf8;
+  color: var(--cyan);
   font-family: var(--font-mono);
   font-weight: 600;
-  font-size: 11px;
+  font-size: 10px;
+  text-shadow: 0 0 8px var(--cyan-glow-sm);
 }
 
 .mana-bars-container {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: 5px;
   height: 48px;
   padding-top: 4px;
 }
@@ -69,19 +97,17 @@
   height: 100%;
   justify-content: flex-end;
   cursor: pointer;
-  transition: transform var(--transition-fast);
+  transition: transform var(--t-fast);
 }
 
-.mana-bar-col:hover {
-  transform: translateY(-2px);
-}
+.mana-bar-col:hover { transform: translateY(-2px); }
 
 .mana-bar-track {
   width: 100%;
   max-width: 22px;
   height: 32px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px 4px 0 0;
+  background: rgba(0, 245, 255, 0.04);
+  border-top: 1px solid rgba(0, 245, 255, 0.10);
   display: flex;
   align-items: flex-end;
   overflow: hidden;
@@ -90,132 +116,129 @@
 
 .mana-bar-fill {
   width: 100%;
-  background: linear-gradient(180deg, #38bdf8, #0284c7);
-  border-radius: 3px 3px 0 0;
-  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+  background: linear-gradient(180deg, var(--cyan), var(--cyan-dim));
+  box-shadow: 0 0 8px var(--cyan-glow-sm);
   min-height: 0;
+  transition: height 0.35s cubic-bezier(0.4,0,0.2,1);
 }
 
 .mana-bar-col:hover .mana-bar-fill {
-  background: linear-gradient(180deg, #67e8f9, #0ea5e9);
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.8);
+  background: linear-gradient(180deg, #ffffff, var(--cyan));
+  box-shadow: 0 0 14px var(--cyan-glow);
 }
 
 .mana-bar-count {
   position: absolute;
-  top: -15px;
+  top: -14px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 10px;
   font-family: var(--font-mono);
-  color: var(--text-primary);
+  font-size: 9px;
+  color: var(--cyan);
   font-weight: 700;
+  text-shadow: 0 0 6px var(--cyan-glow-sm);
 }
 
 .mana-bar-label {
-  font-size: 9.5px;
-  font-family: var(--font-mono);
+  font-family: var(--font-hud);
+  font-size: 8px;
   color: var(--text-muted);
-  margin-top: 3px;
+  margin-top: 2px;
+  letter-spacing: 0.5px;
 }
 
-/* Composition Tags */
+/* ── Composition Tags ────────────────────────────────────────────────────── */
 .deck-composition-box {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  min-width: 280px;
+  min-width: 260px;
 }
 
 .type-breakdown-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
 }
 
 .type-pill {
-  font-size: 10.5px;
-  padding: 2px 7px;
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.05);
+  font-family: var(--font-hud);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+  background: rgba(0, 245, 255, 0.05);
   color: var(--text-secondary);
-  border: 1px solid var(--border-subtle);
-  font-weight: 500;
+  border: 1px solid var(--border-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  transition: all var(--t-fast);
+}
+
+.type-pill:hover {
+  background: rgba(0, 245, 255, 0.10);
+  color: var(--cyan);
+  border-color: var(--border-soft);
 }
 
 .element-dots-row {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
   margin-top: 2px;
 }
 
-.elem-dot-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-}
-
-.elem-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.elem-dot.marte { background: var(--color-marte); box-shadow: 0 0 6px var(--color-marte-glow); }
-.elem-dot.neptuno { background: var(--color-neptuno); box-shadow: 0 0 6px var(--color-neptuno-glow); }
-.elem-dot.jupiter { background: var(--color-jupiter); box-shadow: 0 0 6px var(--color-jupiter-glow); }
-.elem-dot.tierra { background: var(--color-tierra); box-shadow: 0 0 6px var(--color-tierra-glow); }
-.elem-dot.saturno { background: var(--color-saturno); box-shadow: 0 0 6px var(--color-saturno-glow); }
-.elem-dot.mercurio { background: var(--color-mercurio); box-shadow: 0 0 6px var(--color-mercurio-glow); }
-.elem-dot.urano { background: var(--color-urano); box-shadow: 0 0 6px var(--color-urano-glow); }
-.elem-dot.pluton { background: var(--color-pluton); box-shadow: 0 0 6px var(--color-pluton-glow); }
-
-/* ==========================================================================
-   SCROLLABLE DECKS AREA
-   ========================================================================== */
-
+/* ── Scrollable Decks Area ───────────────────────────────────────────────── */
 .deck-scrollable-area {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 18px;
+  gap: 16px;
+  padding: 16px;
 }
 
 .deck-sub-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-subtle);
+  position: relative;
+}
+
+.deck-sub-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--cyan-dim), transparent);
+  opacity: 0.4;
 }
 
 .sub-title {
-  font-family: var(--font-display);
-  font-size: 14px;
+  font-family: var(--font-hud);
+  font-size: 11px;
   font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: 0.5px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px var(--cyan-glow-sm);
 }
 
 .sub-tip {
-  font-size: 11px;
+  font-family: var(--font-hud);
+  font-size: 9px;
   color: var(--text-muted);
+  letter-spacing: 0.5px;
 }
 
-/* ==========================================================================
-   MAIN 40-CARD DECK DROPZONE & GRID
-   ========================================================================== */
-
+/* ── Main 40-Card Deck Dropzone ──────────────────────────────────────────── */
 .deck-dropzone-container {
-  min-height: 220px;
+  min-height: 180px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -223,17 +246,16 @@
 
 .deck-drop-highlight {
   position: absolute;
-  inset: -6px;
-  border-radius: var(--radius-lg);
+  inset: -4px;
   pointer-events: none;
   opacity: 0;
   transform: scale(0.98);
-  transition: all var(--transition-normal);
+  transition: all var(--t-normal);
   z-index: 50;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(0, 245, 255, 0.04);
 }
 
 .deck-dropzone-container.is-drag-over .deck-drop-highlight {
@@ -244,95 +266,114 @@
 .drop-pulse-border {
   position: absolute;
   inset: 0;
-  border: 2px dashed #6366f1;
-  border-radius: var(--radius-lg);
-  box-shadow: 0 0 24px rgba(99, 102, 241, 0.4), inset 0 0 24px rgba(99, 102, 241, 0.2);
-  animation: borderPulse 1.5s infinite ease-in-out;
+  border: 1px dashed var(--cyan);
+  box-shadow: 0 0 20px var(--cyan-glow-sm), inset 0 0 20px rgba(0,245,255,0.05);
+  animation: borderScan 1.2s infinite linear;
 }
 
-@keyframes borderPulse {
-  0%, 100% { border-color: #6366f1; box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
-  50% { border-color: #38bdf8; box-shadow: 0 0 32px rgba(56, 189, 248, 0.6); }
+@keyframes borderScan {
+  0%   { border-color: var(--cyan); box-shadow: 0 0 16px var(--cyan-glow-sm); }
+  50%  { border-color: var(--magenta); box-shadow: 0 0 24px var(--magenta-glow); }
+  100% { border-color: var(--cyan); box-shadow: 0 0 16px var(--cyan-glow-sm); }
 }
 
 .drop-message {
-  background: rgba(14, 20, 36, 0.95);
-  padding: 12px 24px;
-  border-radius: var(--radius-full);
-  border: 1px solid #6366f1;
-  color: #ffffff;
+  background: rgba(2, 8, 20, 0.97);
+  padding: 10px 24px;
+  clip-path: var(--clip-bevel-sm);
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  font-family: var(--font-hud);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
   display: flex;
   align-items: center;
   gap: 10px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 0 20px var(--cyan-glow-sm);
 }
 
+/* ── Deck Empty State ────────────────────────────────────────────────────── */
 .deck-empty-state {
   margin: auto;
   text-align: center;
-  max-width: 440px;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 30px 16px;
+  padding: 32px 16px;
 }
 
 .empty-icon-shield {
   font-size: 40px;
-  filter: drop-shadow(0 0 16px rgba(99, 102, 241, 0.4));
-  animation: floatShield 3s ease-in-out infinite;
+  filter: drop-shadow(0 0 16px var(--cyan-glow));
+  animation: floatShield 3.5s ease-in-out infinite;
 }
 
 @keyframes floatShield {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  0%, 100% { transform: translateY(0);   filter: drop-shadow(0 0 12px var(--cyan-glow-sm)); }
+  50%       { transform: translateY(-8px); filter: drop-shadow(0 0 22px var(--cyan-glow)); }
 }
 
 .deck-empty-state h3 {
-  font-family: var(--font-display);
-  font-size: 18px;
+  font-family: var(--font-hud);
+  font-size: 16px;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: 2px;
+  text-transform: uppercase;
 }
 
 .deck-empty-state p {
   color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.6;
+  font-family: var(--font-body);
 }
 
 .empty-quick-tip {
-  margin-top: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-subtle);
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
-  font-size: 11px;
-  color: #93c5fd;
+  margin-top: 6px;
+  background: rgba(0, 245, 255, 0.04);
+  border: 1px solid var(--border-dim);
+  padding: 6px 14px;
+  font-family: var(--font-hud);
+  font-size: 10px;
+  color: var(--cyan-dim);
+  letter-spacing: 0.5px;
+  clip-path: var(--clip-bevel-sm);
 }
 
+/* ── Deck Cards Grid ─────────────────────────────────────────────────────── */
 .deck-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 14px;
+  gap: 12px;
   width: 100%;
 }
 
-/* ==========================================================================
-   AUTOMATED EXTRA DECK (TOKENS) SECTION
-   ========================================================================== */
-
+/* ── Automated Extra Deck (Tokens) ───────────────────────────────────────── */
 .extra-deck-section {
-  background: rgba(14, 20, 36, 0.65);
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
+  background: rgba(10, 3, 22, 0.75);
+  border: 1px solid rgba(187, 102, 255, 0.25);
+  clip-path: var(--clip-bevel);
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 24px rgba(187,102,255,0.04), 0 0 12px rgba(0,0,0,0.5);
+  position: relative;
+}
+
+.extra-deck-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(187,102,255,0.6), transparent);
 }
 
 .extra-deck-header {
@@ -350,78 +391,84 @@
 }
 
 .extra-deck-title {
-  font-family: var(--font-display);
-  font-size: 13px;
+  font-family: var(--font-hud);
+  font-size: 10px;
   font-weight: 700;
-  color: #d8b4fe;
+  color: var(--color-saturno);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px var(--color-saturno-glow);
 }
 
 .extra-auto-badge {
-  background: rgba(168, 85, 247, 0.2);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.4);
-  font-size: 10px;
+  background: rgba(187, 102, 255, 0.15);
+  color: rgba(187, 102, 255, 0.8);
+  border: 1px solid rgba(187, 102, 255, 0.35);
+  font-family: var(--font-hud);
+  font-size: 8px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
   padding: 2px 8px;
-  border-radius: var(--radius-full);
+  clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
 }
 
 .extra-deck-desc {
-  font-size: 11px;
+  font-family: var(--font-hud);
+  font-size: 9px;
   color: var(--text-muted);
+  letter-spacing: 0.5px;
 }
 
 .extra-deck-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
-  gap: 12px;
-  width: 100%;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
 }
 
 .extra-empty-state {
-  padding: 16px;
+  padding: 14px;
   text-align: center;
-  font-size: 11.5px;
+  font-family: var(--font-hud);
+  font-size: 10px;
   color: var(--text-muted);
-  font-style: italic;
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: var(--radius-sm);
+  letter-spacing: 0.5px;
+  background: rgba(0, 0, 0, 0.2);
 }
 
-/* ==========================================================================
-   TRASH DROPZONE
-   ========================================================================== */
-
+/* ── Trash Dropzone ──────────────────────────────────────────────────────── */
 .trash-dropzone {
-  height: 44px;
-  margin: 0 18px 12px 18px;
-  border-radius: var(--radius-md);
-  border: 2px dashed rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.05);
+  height: 42px;
+  margin: 0 16px 12px 16px;
+  border: 1px dashed rgba(255, 26, 60, 0.25);
+  background: rgba(255, 26, 60, 0.03);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #f87171;
-  font-size: 11.5px;
-  font-weight: 600;
-  transition: all var(--transition-fast);
+  color: rgba(255, 100, 120, 0.6);
+  font-family: var(--font-hud);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: all var(--t-fast);
   opacity: 0.5;
+  clip-path: var(--clip-bevel-sm);
 }
 
 .trash-dropzone.is-active {
   opacity: 1;
-  background: rgba(239, 68, 68, 0.15);
-  border-color: #ef4444;
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.4);
-  transform: scale(1.02);
+  background: rgba(255, 26, 60, 0.08);
+  border-color: var(--crimson);
+  box-shadow: 0 0 14px rgba(255,26,60,0.35);
+  color: #ff6680;
 }
 
 .trash-dropzone.is-drag-over {
-  background: rgba(239, 68, 68, 0.3);
-  border-color: #ff4d4d;
+  background: rgba(255, 26, 60, 0.20);
+  border-color: var(--crimson);
   color: #ffffff;
-  box-shadow: 0 0 24px rgba(239, 68, 68, 0.7);
+  box-shadow: 0 0 24px var(--crimson-glow);
+  opacity: 1;
 }

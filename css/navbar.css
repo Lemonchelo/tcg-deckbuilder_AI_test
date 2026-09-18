@@ -1,222 +1,267 @@
 /* ==========================================================================
-   TOP NAVIGATION BAR STYLES
+   TOP NAVIGATION BAR — Holographic HUD / Command Interface
    ========================================================================== */
 
 .top-navbar {
-  height: 64px;
-  background: var(--bg-surface-glass);
-  backdrop-filter: blur(16px);
-  border-bottom: 1px solid var(--border-subtle);
+  height: 60px;
+  background: rgba(2, 6, 16, 0.96);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-soft);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 20px;
   z-index: 100;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  position: relative;
+  box-shadow: 0 0 0 1px rgba(0,245,255,0.06), 0 4px 24px rgba(0,0,0,0.8);
 }
 
-/* Brand Section */
+/* Top accent line — neon cyan rule */
+.top-navbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: 0.8;
+}
+
+/* ── Brand Section ──────────────────────────────────────────────────────── */
 .nav-brand {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
 
+/* Hexagonal logo badge */
 .brand-logo-gem {
-  width: 32px;
-  height: 32px;
-  background: linear-gradient(135deg, #ec4899, #6366f1, #06b6d4);
-  transform: rotate(45deg);
-  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  clip-path: polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%);
+  background: linear-gradient(135deg, #001a2e 0%, #002a45 50%, #001a2e 100%);
+  border: 1px solid var(--cyan-dim);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.6);
-  animation: gemGlow 4s ease-in-out infinite alternate;
+  box-shadow: 0 0 14px var(--cyan-glow), inset 0 0 10px rgba(0,245,255,0.1);
+  animation: hexPulse 4s ease-in-out infinite alternate;
+  position: relative;
 }
 
 .gem-inner {
-  width: 14px;
-  height: 14px;
-  background: #ffffff;
-  border-radius: 2px;
-  opacity: 0.9;
+  width: 12px;
+  height: 12px;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan-glow);
 }
 
-@keyframes gemGlow {
-  0% { box-shadow: 0 0 12px rgba(99, 102, 241, 0.5); filter: hue-rotate(0deg); }
-  100% { box-shadow: 0 0 22px rgba(6, 182, 212, 0.8); filter: hue-rotate(45deg); }
+@keyframes hexPulse {
+  0%   { box-shadow: 0 0 10px var(--cyan-glow-sm); }
+  100% { box-shadow: 0 0 22px var(--cyan-glow), inset 0 0 16px rgba(0,245,255,0.15); }
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
-}
-
-.brand-title {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  background: linear-gradient(90deg, #ffffff, #a5b4fc, #38bdf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
   line-height: 1.1;
 }
 
-.brand-subtitle {
-  font-size: 11px;
-  color: var(--text-muted);
-  letter-spacing: 0.5px;
-  font-weight: 500;
+.brand-title {
+  font-family: var(--font-hud);
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: var(--cyan);
+  text-shadow: 0 0 14px var(--cyan-glow), 0 0 30px rgba(0,245,255,0.2);
+  line-height: 1;
 }
 
-/* Deck Meta Information (Center Navbar) */
+.brand-subtitle {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+
+/* ── Deck Meta Info (Center) ────────────────────────────────────────────── */
 .nav-deck-info {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  flex: 1;
+  justify-content: center;
 }
 
 .deck-name-container {
   display: flex;
   align-items: center;
-  gap: 8px;
-  position: relative;
+  gap: 6px;
 }
 
 .deck-name-input {
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-bottom: 1px solid var(--border-dim);
   color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 700;
-  padding: 4px 8px;
+  font-family: var(--font-hud);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  padding: 3px 8px;
   outline: none;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  width: 220px;
+  transition: all var(--t-fast);
+  width: 200px;
+  text-transform: uppercase;
 }
-
 .deck-name-input:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--border-medium);
+  border-bottom-color: var(--border-soft);
+  background: rgba(0, 245, 255, 0.03);
 }
-
 .deck-name-input:focus {
-  background: var(--bg-surface-elevated);
-  border-color: var(--accent-primary);
+  border-bottom-color: var(--cyan);
+  box-shadow: 0 2px 0 var(--cyan);
   cursor: text;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+  color: var(--cyan);
 }
 
 .edit-icon {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   pointer-events: none;
 }
 
+/* ── Deck Count Pill — HUD Counter ──────────────────────────────────────── */
 .deck-count-pill {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 4px 12px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-medium);
-  font-size: 13px;
-  font-weight: 600;
+  gap: 5px;
+  background: rgba(0, 245, 255, 0.06);
+  padding: 4px 14px;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  border: 1px solid var(--border-soft);
+  font-size: 11px;
+  font-family: var(--font-hud);
+  transition: all var(--t-normal);
 }
 
 .count-label {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
 }
 
 .count-value {
   font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: 700;
-  color: #38bdf8;
-  transition: color var(--transition-fast);
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--cyan);
+  text-shadow: 0 0 10px var(--cyan-glow);
+  line-height: 1;
+  letter-spacing: 0;
+  transition: all var(--t-fast);
 }
 
 .count-target {
   color: var(--text-secondary);
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
+.deck-count-pill.is-valid {
+  border-color: rgba(0, 255, 136, 0.4);
+  background: rgba(0, 255, 136, 0.07);
+}
 .deck-count-pill.is-valid .count-value {
-  color: var(--accent-success);
+  color: var(--emerald);
+  text-shadow: 0 0 10px var(--emerald-glow);
 }
 
+.deck-count-pill.is-over {
+  border-color: rgba(255, 26, 60, 0.4);
+  background: rgba(255, 26, 60, 0.07);
+}
 .deck-count-pill.is-over .count-value {
-  color: var(--accent-danger);
+  color: var(--crimson);
+  text-shadow: 0 0 10px var(--crimson-glow);
 }
 
+/* ── Extra Token Pill ───────────────────────────────────────────────────── */
 .extra-tokens-pill {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(168, 85, 247, 0.1);
-  padding: 4px 12px;
-  border-radius: var(--radius-full);
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  font-size: 13px;
-  font-weight: 600;
+  gap: 5px;
+  background: rgba(187, 102, 255, 0.07);
+  padding: 4px 14px;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  border: 1px solid rgba(187, 102, 255, 0.30);
 }
 
 .extra-token-val {
   font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 800;
-  color: #c084fc;
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--color-saturno);
+  text-shadow: 0 0 10px var(--color-saturno-glow);
+  line-height: 1;
 }
 
 .extra-token-badge {
-  font-size: 10.5px;
-  color: #d8b4fe;
+  font-family: var(--font-hud);
+  font-size: 9px;
+  color: rgba(187, 102, 255, 0.7);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
 }
 
+/* ── Status Badge ───────────────────────────────────────────────────────── */
 .deck-status-badge {
-  font-size: 11px;
+  font-family: var(--font-hud);
+  font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.75px;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-  display: inline-flex;
-  align-items: center;
+  letter-spacing: 1.5px;
+  padding: 4px 12px;
+  clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
 }
 
 .deck-status-badge.is-incomplete {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 197, 24, 0.10);
+  color: var(--gold);
+  border: 1px solid rgba(245, 197, 24, 0.30);
 }
 
 .deck-status-badge.is-ready {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+  background: rgba(0, 255, 136, 0.10);
+  color: var(--emerald);
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.30);
+  animation: readyPulse 2s ease-in-out infinite;
+}
+
+@keyframes readyPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(0, 255, 136, 0.25); }
+  50%       { box-shadow: 0 0 18px rgba(0, 255, 136, 0.55); }
 }
 
 .deck-status-badge.is-overlimit {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(255, 26, 60, 0.12);
+  color: var(--crimson);
+  border: 1px solid rgba(255, 26, 60, 0.40);
+  box-shadow: 0 0 10px rgba(255, 26, 60, 0.30);
 }
 
-/* Nav Actions */
+/* ── Nav Actions ────────────────────────────────────────────────────────── */
 .nav-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-shrink: 0;
 }
