@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aetherium TCG Deckbuilder Studio</title>
+  <meta name="description" content="Creador de mazos para TCG con Facciones Planetarias, Sellos, Mazo Extra de Tokens automático y Drag and Drop.">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/navbar.css">
+  <link rel="stylesheet" href="css/deck-grid.css">
+  <link rel="stylesheet" href="css/library-sidebar.css">
+  <link rel="stylesheet" href="css/card.css">
+  <link rel="stylesheet" href="css/modals.css">
+</head>
+<body class="theme-dark">
+  <div id="app-container" class="app-layout">
+    
+    <!-- TOP NAVIGATION BAR -->
+    <header class="top-navbar" id="top-navbar">
+      <div class="nav-brand">
+        <div class="brand-logo-gem">
+          <div class="gem-inner"></div>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">AETHERIUM</h1>
+          <span class="brand-subtitle">Planetary Deckbuilder Studio</span>
+        </div>
+      </div>
+
+      <!-- Deck Meta Info in Navbar -->
+      <div class="nav-deck-info">
+        <div class="deck-name-container">
+          <input type="text" id="deck-name-input" class="deck-name-input" value="Mazo Planetario de Batalla" title="Haz clic para renombrar el mazo" maxlength="32">
+          <span class="edit-icon">✎</span>
+        </div>
+        <!-- Main Deck 40-Card Counter -->
+        <div class="deck-count-pill" id="deck-count-pill" title="El mazo principal debe contener exactamente 40 cartas">
+          <span class="count-label">Mazo:</span>
+          <span class="count-value" id="deck-total-count">0</span>
+          <span class="count-target">/ 40</span>
+        </div>
+        <!-- Extra Deck (Token) Counter -->
+        <div class="extra-tokens-pill" id="extra-tokens-pill" title="Tokens generados automáticamente según las facciones activas en tu mazo">
+          <span class="count-label">Mazo Extra:</span>
+          <span class="extra-token-val" id="extra-tokens-count">0</span>
+          <span class="extra-token-badge">Tokens</span>
+        </div>
+        <!-- Status Badge -->
+        <div class="deck-status-badge is-incomplete" id="deck-status-badge">
+          Incompleto
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="nav-actions">
+        <button id="btn-import-folder" class="btn btn-primary" title="Importar cartas desde una carpeta con imágenes">
+          <span class="btn-icon">📁</span>
+          <span class="btn-label">Importar Cartas</span>
+        </button>
+        <button id="btn-test-hand" class="btn btn-secondary" title="Simular mano inicial y robos">
+          <span class="btn-icon">🎴</span>
+          <span class="btn-label">Probar Mano</span>
+        </button>
+        <button id="btn-export-deck" class="btn btn-secondary" title="Exportar o Importar Mazo">
+          <span class="btn-icon">📥</span>
+          <span class="btn-label">Exportar / Importar</span>
+        </button>
+        <button id="btn-clear-deck" class="btn btn-danger" title="Vaciar todas las cartas del mazo">
+          <span class="btn-icon">🗑️</span>
+          <span class="btn-label">Limpiar</span>
+        </button>
+        <button id="btn-sound-toggle" class="btn btn-icon-only btn-ghost" title="Alternar efectos de sonido">
+          <span id="sound-icon">🔊</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- MAIN TWO-COLUMN WORKSPACE -->
+    <main class="main-workspace">
+      
+      <!-- LEFT SECTION: DECK BUILDING BOARD (MAIN 40 DECK + AUTOMATED EXTRA DECK) -->
+      <section class="deck-section" id="deck-section">
+        
+        <!-- Deck Analytics Bar -->
+        <div class="deck-header-panel">
+          <div class="analytics-row">
+            <!-- Mana Curve Chart (with Sellos Column) -->
+            <div class="mana-curve-box">
+              <div class="box-title">
+                <span>Curva de Maná & Sellos</span>
+                <span class="avg-mana" id="avg-mana-display">Coste Medio: 0.0</span>
+              </div>
+              <div class="mana-bars-container" id="mana-curve-bars">
+                <!-- Dynamically generated mana curve bars -->
+              </div>
+            </div>
+
+            <!-- Type & Planetary Summary Breakdown -->
+            <div class="deck-composition-box">
+              <div class="box-title">Composición del Mazo (Límites: 4 Común, 3 Rara, 2 Épica, 1 Leg.)</div>
+              <div class="type-breakdown-tags" id="type-breakdown-tags">
+                <span class="type-pill" id="pill-creatures">Criaturas: 0</span>
+                <span class="type-pill" id="pill-fast-spells">H. Rápido: 0</span>
+                <span class="type-pill" id="pill-slow-spells">H. Lento: 0</span>
+                <span class="type-pill" id="pill-structures">Estructuras: 0</span>
+                <span class="type-pill" id="pill-artifacts">Artefactos: 0</span>
+                <span class="type-pill" id="pill-sellos" style="color:#34d399; font-weight:700;">Sellos: 0</span>
+                <span class="type-pill" id="pill-terrains">Terrenos: 0</span>
+              </div>
+              <!-- Planetary Distribution Dots -->
+              <div class="element-dots-row" id="element-distribution-dots">
+                <!-- Dynamically rendered planet dots -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scrollable Decks Area (Main Deck + Extra Deck) -->
+        <div class="deck-scrollable-area">
+          
+          <!-- MAIN 40-CARD DECK DROPZONE -->
+          <div class="deck-main-section">
+            <div class="deck-sub-header">
+              <span class="sub-title">🎴 Mazo Principal (40 cartas)</span>
+              <span class="sub-tip">Límites: 4 Comunes, 3 Raras, 2 Épicas, 1 Legendaria</span>
+            </div>
+
+            <div class="deck-dropzone-container" id="deck-dropzone">
+              <div class="deck-drop-highlight" id="deck-drop-highlight">
+                <div class="drop-pulse-border"></div>
+                <div class="drop-message">
+                  <span class="drop-icon">✨</span>
+                  <span>¡Suelta la carta aquí para agregarla al mazo!</span>
+                </div>
+              </div>
+
+              <!-- Empty State -->
+              <div class="deck-empty-state" id="deck-empty-state">
+                <div class="empty-icon-shield">🎴</div>
+                <h3>Tu mazo está vacío</h3>
+                <p>Arrastra cartas desde la biblioteca o haz clic en ellas para agregarlas (hasta 40 cartas).</p>
+                <div class="empty-quick-tip">
+                  <span>💡 Recuerda agregar cartas <strong>Sello</strong> para proveer de recursos a tus invocaciones.</span>
+                </div>
+              </div>
+
+              <!-- Active Cards Grid in Main Deck -->
+              <div class="deck-grid" id="deck-grid">
+                <!-- Rendered via JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- AUTOMATED EXTRA DECK (TOKENS) -->
+          <div class="extra-deck-section" id="extra-deck-panel">
+            <div class="extra-deck-header">
+              <div class="extra-header-left">
+                <span class="extra-deck-title">⚡ Mazo Extra (Tokens)</span>
+                <span class="extra-auto-badge">Automático</span>
+              </div>
+              <span class="extra-deck-desc">Se agregan y remueven automáticamente según las facciones presentes en tu mazo principal.</span>
+            </div>
+
+            <div class="extra-deck-body">
+              <div class="extra-empty-state" id="extra-empty-state" style="display: none;">
+                <span>Agrega cartas de alguna facción al mazo principal para generar sus tokens correspondientes.</span>
+              </div>
+              <div class="extra-deck-grid" id="extra-deck-grid">
+                <!-- Dynamically populated with active faction tokens -->
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Bottom Trash Dropzone for Drag-to-Remove -->
+        <div class="trash-dropzone" id="trash-dropzone">
+          <span class="trash-icon">🗑️</span>
+          <span class="trash-text">Arrastra aquí para remover del mazo principal</span>
+        </div>
+      </section>
+
+      <!-- RIGHT SECTION: CARD LIBRARY SLIDER & FILTERS -->
+      <aside class="library-sidebar" id="library-sidebar">
+        
+        <!-- Sidebar Header with Card Count -->
+        <div class="library-header">
+          <div class="library-title-row">
+            <h2 class="section-title">Biblioteca de Cartas</h2>
+            <div class="library-count-badge" id="library-count-badge">
+              Mostrando <span id="filtered-card-count">0</span> / <span id="total-card-count">0</span>
+            </div>
+          </div>
+
+          <!-- SEARCH & ZOOM SLIDER BAR -->
+          <div class="search-and-scale-row">
+            <div class="search-input-wrapper">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="filter-search" class="filter-search-input" placeholder="Buscar por nombre o habilidad..." autocomplete="off">
+              <button id="btn-clear-search" class="clear-search-btn" title="Limpiar búsqueda" style="display: none;">✕</button>
+            </div>
+            
+            <!-- CARD SIZE ZOOM SLIDER -->
+            <div class="zoom-slider-wrapper" title="Ajustar tamaño de cartas en la grilla">
+              <span class="zoom-icon">🔎</span>
+              <span class="zoom-label">Zoom:</span>
+              <input type="range" id="card-scale-slider" class="range-slider" min="0.75" max="1.35" step="0.05" value="1.0">
+              <span class="zoom-value" id="card-scale-value">100%</span>
+            </div>
+          </div>
+
+          <!-- ADVANCED FILTERS PANEL -->
+          <div class="filters-panel">
+            <!-- Elements / Planets Filter -->
+            <div class="filter-group">
+              <span class="filter-group-label">Planetas / Facciones:</span>
+              <div class="element-filter-buttons" id="element-filters">
+                <button class="element-btn active" data-element="all" title="Todos los planetas">
+                  <span class="elem-badge all">Todos</span>
+                </button>
+                <button class="element-btn" data-element="marte" title="Marte (Fuego y Guerra)">
+                  <span class="elem-badge marte">🔴 Marte</span>
+                </button>
+                <button class="element-btn" data-element="neptuno" title="Neptuno (Océano y Misticismo)">
+                  <span class="elem-badge neptuno">🔵 Neptuno</span>
+                </button>
+                <button class="element-btn" data-element="jupiter" title="Júpiter (Tormenta y Oro)">
+                  <span class="elem-badge jupiter">🟠 Júpiter</span>
+                </button>
+                <button class="element-btn" data-element="tierra" title="Tierra (Naturaleza y Vida)">
+                  <span class="elem-badge tierra">🟢 Tierra</span>
+                </button>
+                <button class="element-btn" data-element="saturno" title="Saturno (Anillos y Tiempo)">
+                  <span class="elem-badge saturno">🪐 Saturno</span>
+                </button>
+                <button class="element-btn" data-element="mercurio" title="Mercurio (Azogue y Velocidad)">
+                  <span class="elem-badge mercurio">⚪ Mercurio</span>
+                </button>
+                <button class="element-btn" data-element="urano" title="Urano (Viento y Hielo)">
+                  <span class="elem-badge urano">💠 Urano</span>
+                </button>
+                <button class="element-btn" data-element="pluton" title="Plutón (Vacío y Sombras)">
+                  <span class="elem-badge pluton">🌌 Plutón</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Types Filter Buttons (Criatura, HechizoRapido, HechizoLento, Estructura, Artefacto, Sello, Terreno) -->
+            <div class="filter-group">
+              <span class="filter-group-label">Tipos de Carta:</span>
+              <div class="type-filter-buttons-wrap" id="type-filters">
+                <button class="pill-filter-btn active" data-type="all">Todos</button>
+                <button class="pill-filter-btn" data-type="Criatura">Criatura</button>
+                <button class="pill-filter-btn" data-type="HechizoRapido">H. Rápido</button>
+                <button class="pill-filter-btn" data-type="HechizoLento">H. Lento</button>
+                <button class="pill-filter-btn" data-type="Estructura">Estructura</button>
+                <button class="pill-filter-btn" data-type="Artefacto">Artefacto</button>
+                <button class="pill-filter-btn" data-type="Sello" style="border-color:#34d399; color:#34d399;">💎 Sello</button>
+                <button class="pill-filter-btn" data-type="Terreno">Terreno</button>
+              </div>
+            </div>
+
+            <!-- Rarity and Mana Cost Row -->
+            <div class="filter-row-flex align-bottom">
+              <!-- Mana Cost Range Filter -->
+              <div class="filter-group flex-grow">
+                <div class="filter-label-row">
+                  <span class="filter-group-label">Coste de Maná Máximo:</span>
+                  <span class="mana-cost-display" id="mana-slider-val">Todos (10+)</span>
+                </div>
+                <div class="mana-slider-container">
+                  <input type="range" id="mana-cost-slider" class="range-slider range-mana" min="0" max="10" step="1" value="10">
+                  <div class="slider-ticks">
+                    <span>0</span><span>2</span><span>4</span><span>6</span><span>8</span><span>10+</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Rarity Filter -->
+              <div class="filter-group">
+                <span class="filter-group-label">Rareza:</span>
+                <select id="rarity-filter" class="custom-select">
+                  <option value="all">Todas</option>
+                  <option value="Common">⚪ Común (máx. 4)</option>
+                  <option value="Rare">🔵 Rara (máx. 3)</option>
+                  <option value="Epic">🟣 Épica (máx. 2)</option>
+                  <option value="Legendary">🟡 Legendaria (máx. 1)</option>
+                </select>
+              </div>
+
+              <!-- Sort Order -->
+              <div class="filter-group">
+                <span class="filter-group-label">Ordenar:</span>
+                <select id="sort-select" class="custom-select">
+                  <option value="cost-asc">Coste (Menor a Mayor)</option>
+                  <option value="cost-desc">Coste (Mayor a Menor)</option>
+                  <option value="name-asc">Nombre (A - Z)</option>
+                  <option value="name-desc">Nombre (Z - A)</option>
+                  <option value="rarity-desc">Rareza</option>
+                  <option value="attack-desc">Ataque</option>
+                  <option value="health-desc">Vida</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Reset Filters Link -->
+            <div class="filters-footer">
+              <button id="btn-reset-filters" class="btn-link">Restablecer filtros</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SCROLLABLE LIBRARY CARD GRID -->
+        <div class="library-scroll-area" id="library-scroll-container">
+          <div class="library-grid" id="library-grid">
+            <!-- Rendered dynamically by JS -->
+          </div>
+
+          <!-- Empty Results State -->
+          <div class="library-empty" id="library-empty" style="display: none;">
+            <span class="empty-icon">🔍</span>
+            <p>No se encontraron cartas que coincidan con los filtros.</p>
+            <button id="btn-clear-filters-empty" class="btn btn-secondary btn-sm">Limpiar Filtros</button>
+          </div>
+        </div>
+      </aside>
+
+    </main>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- HIDDEN FILE INPUTS FOR IMPORT -->
+    <input type="file" id="input-import-folder" webkitdirectory directory multiple accept="image/*" style="display: none;">
+    <input type="file" id="input-import-files" multiple accept="image/*" style="display: none;">
+
+    <!-- MODAL: IMPORT CARDS FROM FOLDER/IMAGES -->
+    <div class="modal-backdrop" id="modal-import-images">
+      <div class="modal-dialog modal-import-images">
+        <div class="modal-header">
+          <div class="modal-title-with-icon">
+            <span class="modal-icon">📁</span>
+            <h2>Importar Colección de Cartas</h2>
+          </div>
+          <button class="modal-close-btn" id="btn-close-import-images">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="import-format-guide">
+            <h3>Formatos de Nombre de Archivo Compatibles</h3>
+            <p>El sistema detecta automáticamente estadísticas, sellos de maná y tokens del mazo extra:</p>
+            <div class="format-example-box">
+              1. Estándar: <code>Nombre_Tipo_Rareza_Planeta_ATK_DEF_Coste.png</code><br>
+              2. Sello: <code>Sello_Planeta.png</code><br>
+              3. Token: <code>Token_Nombre_Planeta.png</code>
+            </div>
+            <div class="format-examples-list">
+              <div>💡 <em>Ares_Criatura_Legendaria_Marte_8_6_7.png</em></div>
+              <div>💡 <em>Rayo_HechizoRapido_Comun_Jupiter_0_0_1.png</em></div>
+              <div>💡 <em>Sello_Marte.png</em> (Sello de recurso para maná marciano)</div>
+              <div>💡 <em>Token_GuerreroMarciano_Marte.png</em> (Token automático de Mazo Extra)</div>
+            </div>
+          </div>
+
+          <div class="import-drop-area" id="import-drop-area">
+            <span class="import-icon">📥</span>
+            <h4>Arrastra aquí tu carpeta o archivos de imágenes</h4>
+            <p>o selecciona una de las siguientes opciones:</p>
+            <div class="import-buttons-row">
+              <button id="btn-select-folder" class="btn btn-primary">
+                <span>📁</span> Seleccionar Carpeta
+              </button>
+              <button id="btn-select-files" class="btn btn-secondary">
+                <span>🖼️</span> Seleccionar Imágenes
+              </button>
+            </div>
+          </div>
+
+          <div id="import-progress-box" class="import-progress-box" style="display: none;">
+            <div class="progress-bar-container">
+              <div id="import-progress-fill" class="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+            <span id="import-progress-text" class="progress-text">Procesando imágenes...</span>
+          </div>
+
+          <div id="import-results-summary" class="import-results-summary" style="display: none;">
+            <h4>Cartas detectadas:</h4>
+            <div id="import-cards-preview" class="import-cards-preview-list"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-clear-custom-cards" class="btn btn-danger btn-sm" title="Borrar cartas personalizadas importadas">
+            <span>🗑️</span> Borrar Cartas Personalizadas
+          </button>
+          <button id="btn-confirm-import-close" class="btn btn-secondary">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: CARD INSPECTOR (3D HD VIEW) -->
+    <div class="modal-backdrop" id="modal-card-inspector">
+      <div class="modal-dialog modal-inspector">
+        <button class="modal-close-btn" id="btn-close-inspector">&times;</button>
+        <div class="inspector-content" id="inspector-content">
+          <!-- Populated dynamically by JS with 3D card and lore -->
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: TEST OPENING HAND (MULLIGAN SIMULATOR) -->
+    <div class="modal-backdrop" id="modal-test-hand">
+      <div class="modal-dialog modal-test-hand">
+        <div class="modal-header">
+          <div class="modal-title-with-icon">
+            <span class="modal-icon">🎴</span>
+            <h2>Simulador de Mano Inicial (Mulligan)</h2>
+          </div>
+          <button class="modal-close-btn" id="btn-close-test-hand">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="test-hand-desc">
+            Prueba cómo iniciaría tu partida con tu mazo de 40 cartas. Haz clic en las cartas que deseas descartar y presiona <strong>Mulligan</strong> para reemplazarlas.
+          </p>
+          <div class="test-hand-stats" id="test-hand-stats">
+            <span>Mano de 5 cartas</span> &bull; 
+            <span id="hand-avg-mana">Coste promedio: 0.0</span>
+          </div>
+          <div class="test-hand-cards" id="test-hand-cards">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-mulligan" class="btn btn-secondary">
+            <span>🔄</span> Hacer Mulligan (Reemplazar seleccionadas)
+          </button>
+          <button id="btn-draw-one" class="btn btn-secondary">
+            <span>🃏</span> Robar 1 Carta
+          </button>
+          <button id="btn-reset-hand" class="btn btn-primary">
+            <span>✨</span> Nueva Mano
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: EXPORT / IMPORT DECK -->
+    <div class="modal-backdrop" id="modal-export-import">
+      <div class="modal-dialog modal-export">
+        <div class="modal-header">
+          <div class="modal-title-with-icon">
+            <span class="modal-icon">📜</span>
+            <h2>Exportar / Importar Mazo</h2>
+          </div>
+          <button class="modal-close-btn" id="btn-close-export">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="tabs-header">
+            <button class="tab-btn active" data-tab="tab-text-deck">Lista de Texto</button>
+            <button class="tab-btn" data-tab="tab-json-deck">Código JSON</button>
+          </div>
+          <div class="tab-content active" id="tab-text-deck">
+            <textarea id="export-text-area" class="code-textarea" rows="10" placeholder="Pega tu lista de cartas aquí..."></textarea>
+          </div>
+          <div class="tab-content" id="tab-json-deck">
+            <textarea id="export-json-area" class="code-textarea" rows="10" placeholder="Pega el código JSON del mazo aquí..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-copy-clipboard" class="btn btn-secondary">
+            <span>📋</span> Copiar al Portapapeles
+          </button>
+          <button id="btn-import-apply" class="btn btn-primary">
+            <span>⚡</span> Cargar este Mazo
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SCRIPTS (Unified Standalone Bundle) -->
+  <script src="js/bundle.js"></script>
+</body>
+</html>

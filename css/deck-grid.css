@@ -1,0 +1,427 @@
+/* ==========================================================================
+   DECK SECTION, MAIN DECK (40 CARDS) & AUTOMATED EXTRA DECK (TOKENS)
+   ========================================================================== */
+
+.deck-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-right: 1px solid var(--border-subtle);
+  background: rgba(10, 14, 26, 0.45);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Deck Header Analytics Panel */
+.deck-header-panel {
+  padding: 12px 18px;
+  background: var(--bg-surface-glass);
+  border-bottom: 1px solid var(--border-subtle);
+  backdrop-filter: blur(14px);
+  z-index: 10;
+}
+
+.analytics-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+}
+
+/* Mana Curve Box */
+.mana-curve-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.box-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.75px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.avg-mana {
+  color: #38bdf8;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.mana-bars-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 48px;
+  padding-top: 4px;
+}
+
+.mana-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.mana-bar-col:hover {
+  transform: translateY(-2px);
+}
+
+.mana-bar-track {
+  width: 100%;
+  max-width: 22px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px 4px 0 0;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  position: relative;
+}
+
+.mana-bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #38bdf8, #0284c7);
+  border-radius: 3px 3px 0 0;
+  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+  min-height: 0;
+}
+
+.mana-bar-col:hover .mana-bar-fill {
+  background: linear-gradient(180deg, #67e8f9, #0ea5e9);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.8);
+}
+
+.mana-bar-count {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.mana-bar-label {
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+/* Composition Tags */
+.deck-composition-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 280px;
+}
+
+.type-breakdown-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.type-pill {
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  font-weight: 500;
+}
+
+.element-dots-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.elem-dot-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.elem-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.elem-dot.marte { background: var(--color-marte); box-shadow: 0 0 6px var(--color-marte-glow); }
+.elem-dot.neptuno { background: var(--color-neptuno); box-shadow: 0 0 6px var(--color-neptuno-glow); }
+.elem-dot.jupiter { background: var(--color-jupiter); box-shadow: 0 0 6px var(--color-jupiter-glow); }
+.elem-dot.tierra { background: var(--color-tierra); box-shadow: 0 0 6px var(--color-tierra-glow); }
+.elem-dot.saturno { background: var(--color-saturno); box-shadow: 0 0 6px var(--color-saturno-glow); }
+.elem-dot.mercurio { background: var(--color-mercurio); box-shadow: 0 0 6px var(--color-mercurio-glow); }
+.elem-dot.urano { background: var(--color-urano); box-shadow: 0 0 6px var(--color-urano-glow); }
+.elem-dot.pluton { background: var(--color-pluton); box-shadow: 0 0 6px var(--color-pluton-glow); }
+
+/* ==========================================================================
+   SCROLLABLE DECKS AREA
+   ========================================================================== */
+
+.deck-scrollable-area {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 18px;
+}
+
+.deck-sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sub-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+
+.sub-tip {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   MAIN 40-CARD DECK DROPZONE & GRID
+   ========================================================================== */
+
+.deck-dropzone-container {
+  min-height: 220px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.deck-drop-highlight {
+  position: absolute;
+  inset: -6px;
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.98);
+  transition: all var(--transition-normal);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.deck-dropzone-container.is-drag-over .deck-drop-highlight {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.drop-pulse-border {
+  position: absolute;
+  inset: 0;
+  border: 2px dashed #6366f1;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 24px rgba(99, 102, 241, 0.4), inset 0 0 24px rgba(99, 102, 241, 0.2);
+  animation: borderPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes borderPulse {
+  0%, 100% { border-color: #6366f1; box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
+  50% { border-color: #38bdf8; box-shadow: 0 0 32px rgba(56, 189, 248, 0.6); }
+}
+
+.drop-message {
+  background: rgba(14, 20, 36, 0.95);
+  padding: 12px 24px;
+  border-radius: var(--radius-full);
+  border: 1px solid #6366f1;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: var(--shadow-lg);
+}
+
+.deck-empty-state {
+  margin: auto;
+  text-align: center;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 30px 16px;
+}
+
+.empty-icon-shield {
+  font-size: 40px;
+  filter: drop-shadow(0 0 16px rgba(99, 102, 241, 0.4));
+  animation: floatShield 3s ease-in-out infinite;
+}
+
+@keyframes floatShield {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.deck-empty-state h3 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.deck-empty-state p {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.empty-quick-tip {
+  margin-top: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: #93c5fd;
+}
+
+.deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+
+/* ==========================================================================
+   AUTOMATED EXTRA DECK (TOKENS) SECTION
+   ========================================================================== */
+
+.extra-deck-section {
+  background: rgba(14, 20, 36, 0.65);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.extra-deck-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.extra-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.extra-deck-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: #d8b4fe;
+}
+
+.extra-auto-badge {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.extra-deck-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.extra-deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.extra-empty-state {
+  padding: 16px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-style: italic;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-sm);
+}
+
+/* ==========================================================================
+   TRASH DROPZONE
+   ========================================================================== */
+
+.trash-dropzone {
+  height: 44px;
+  margin: 0 18px 12px 18px;
+  border-radius: var(--radius-md);
+  border: 2px dashed rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #f87171;
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+  opacity: 0.5;
+}
+
+.trash-dropzone.is-active {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.4);
+  transform: scale(1.02);
+}
+
+.trash-dropzone.is-drag-over {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: #ff4d4d;
+  color: #ffffff;
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.7);
+}

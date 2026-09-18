@@ -1,0 +1,335 @@
+/* ==========================================================================
+   AETHERIUM TCG DECKBUILDER - CORE DESIGN SYSTEM & TOKENS
+   ========================================================================== */
+
+:root {
+  /* Surface & Background Colors */
+  --bg-core: #070a13;
+  --bg-surface: #0e1424;
+  --bg-surface-elevated: #151e34;
+  --bg-surface-glass: rgba(14, 20, 36, 0.8);
+  --bg-card: #141c32;
+  --bg-card-hover: #1c2744;
+  
+  /* Borders & Dividers */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.16);
+  --border-bright: rgba(255, 255, 255, 0.28);
+  --border-glow: rgba(99, 102, 241, 0.4);
+
+  /* Typography */
+  --font-display: 'Cinzel', serif;
+  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-inverse: #070a13;
+
+  /* ==========================================================================
+     PLANETARY FACTION COLORS (Planets of the Solar System, excluding Venus & Sun)
+     ========================================================================== */
+  
+  /* Marte (Mars) - Red / Flame / War */
+  --color-marte: #ef4444;
+  --color-marte-glow: rgba(239, 68, 68, 0.45);
+  --color-marte-gradient: linear-gradient(135deg, #ef4444, #991b1b);
+
+  /* Neptuno (Neptune) - Deep Oceanic Blue / Frost / Mystic */
+  --color-neptuno: #38bdf8;
+  --color-neptuno-glow: rgba(56, 189, 248, 0.45);
+  --color-neptuno-gradient: linear-gradient(135deg, #38bdf8, #1d4ed8);
+
+  /* Júpiter (Jupiter) - Giant Amber / Storm / Gold */
+  --color-jupiter: #f59e0b;
+  --color-jupiter-glow: rgba(245, 158, 11, 0.45);
+  --color-jupiter-gradient: linear-gradient(135deg, #fbbf24, #d97706);
+
+  /* Tierra (Earth) - Emerald Flora / Life / Solid */
+  --color-tierra: #10b981;
+  --color-tierra-glow: rgba(16, 185, 129, 0.45);
+  --color-tierra-gradient: linear-gradient(135deg, #10b981, #047857);
+
+  /* Saturno (Saturn) - Amethyst Rings / Time / Gravity */
+  --color-saturno: #a855f7;
+  --color-saturno-glow: rgba(168, 85, 247, 0.45);
+  --color-saturno-gradient: linear-gradient(135deg, #c084fc, #6b21a8);
+
+  /* Mercurio (Mercury) - Quicksilver / Speed / Trickery */
+  --color-mercurio: #cbd5e1;
+  --color-mercurio-glow: rgba(203, 213, 225, 0.45);
+  --color-mercurio-gradient: linear-gradient(135deg, #f1f5f9, #64748b);
+
+  /* Urano (Uranus) - Cyan Aurora / Sky / Wind */
+  --color-urano: #06b6d4;
+  --color-urano-glow: rgba(6, 182, 212, 0.45);
+  --color-urano-gradient: linear-gradient(135deg, #22d3ee, #0891b2);
+
+  /* Plutón (Pluto) - Cosmic Void / Nether / Mystery */
+  --color-pluton: #ec4899;
+  --color-pluton-glow: rgba(236, 72, 153, 0.45);
+  --color-pluton-gradient: linear-gradient(135deg, #f43f5e, #831843);
+
+  /* Neutral / Arcano */
+  --color-neutral: #94a3b8;
+  --color-neutral-glow: rgba(148, 163, 184, 0.3);
+
+  /* Rarities */
+  --rarity-common: #94a3b8;
+  --rarity-rare: #38bdf8;
+  --rarity-epic: #c084fc;
+  --rarity-legendary: #fbbf24;
+
+  /* UI Accent & State Colors */
+  --accent-primary: #6366f1;
+  --accent-primary-hover: #4f46e5;
+  --accent-success: #10b981;
+  --accent-danger: #ef4444;
+  --accent-warning: #f59e0b;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.7);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-core);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(circle at 50% 0%, #161e36 0%, #070a13 70%);
+  position: relative;
+  overflow: hidden;
+}
+
+.main-workspace {
+  display: grid;
+  grid-template-columns: 1fr 490px;
+  flex: 1;
+  height: calc(100vh - 64px);
+  overflow: hidden;
+  position: relative;
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(14, 20, 36, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* BUTTONS */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+  outline: none;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.5);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+  backdrop-filter: blur(8px);
+}
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--border-bright);
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #ffffff;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.btn-icon-only {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  font-size: 16px;
+}
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.btn-link {
+  background: none;
+  border: none;
+  color: #818cf8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 2px 4px;
+}
+.btn-link:hover {
+  color: #a5b4fc;
+}
+
+.custom-select {
+  background: rgba(14, 20, 36, 0.9);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+.custom-select:focus {
+  border-color: var(--accent-primary);
+}
+.custom-select option {
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+}
+
+.range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+  cursor: pointer;
+}
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #6366f1;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.8);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+.range-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+.range-mana::-webkit-slider-thumb {
+  background: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.9);
+}
+
+/* TOASTS */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  min-width: 280px;
+  max-width: 380px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(14, 20, 36, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-medium);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.toast.toast-success { border-left: 4px solid var(--accent-success); }
+.toast.toast-warning { border-left: 4px solid var(--accent-warning); }
+.toast.toast-danger { border-left: 4px solid var(--accent-danger); }
+.toast.toast-info { border-left: 4px solid var(--accent-primary); }
+.toast.hide { opacity: 0; transform: translateX(-20px); }
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

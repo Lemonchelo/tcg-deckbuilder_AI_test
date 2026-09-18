@@ -1,0 +1,261 @@
+/* ==========================================================================
+   PREMIUM TCG FULL-BLEED CARD COMPONENT & 3D FOIL EFFECTS
+   ========================================================================== */
+
+.tcg-card-wrapper {
+  perspective: 1000px;
+  position: relative;
+  user-select: none;
+}
+
+.tcg-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 5 / 7;
+  border-radius: var(--radius-md);
+  background: #0d1322;
+  border: 2px solid var(--border-medium);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  cursor: grab;
+  transform-style: preserve-3d;
+  transition: transform 0.15s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  will-change: transform;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tcg-card:active {
+  cursor: grabbing;
+}
+
+.tcg-card.is-dragging {
+  opacity: 0.4;
+  transform: scale(0.95);
+}
+
+/* 3D Tilt and Glow on Hover */
+.tcg-card-wrapper:hover .tcg-card {
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.75), 0 0 20px var(--planet-glow, rgba(99, 102, 241, 0.5));
+  border-color: var(--planet-color, #818cf8);
+  z-index: 20;
+}
+
+/* ==========================================================================
+   PLANETARY COLOR BORDERS & GLOWS (Excluding Venus & Sun)
+   ========================================================================== */
+.tcg-card[data-element="marte"] {
+  --planet-color: var(--color-marte);
+  --planet-glow: var(--color-marte-glow);
+}
+.tcg-card[data-element="neptuno"] {
+  --planet-color: var(--color-neptuno);
+  --planet-glow: var(--color-neptuno-glow);
+}
+.tcg-card[data-element="jupiter"] {
+  --planet-color: var(--color-jupiter);
+  --planet-glow: var(--color-jupiter-glow);
+}
+.tcg-card[data-element="tierra"] {
+  --planet-color: var(--color-tierra);
+  --planet-glow: var(--color-tierra-glow);
+}
+.tcg-card[data-element="saturno"] {
+  --planet-color: var(--color-saturno);
+  --planet-glow: var(--color-saturno-glow);
+}
+.tcg-card[data-element="mercurio"] {
+  --planet-color: var(--color-mercurio);
+  --planet-glow: var(--color-mercurio-glow);
+}
+.tcg-card[data-element="urano"] {
+  --planet-color: var(--color-urano);
+  --planet-glow: var(--color-urano-glow);
+}
+.tcg-card[data-element="pluton"] {
+  --planet-color: var(--color-pluton);
+  --planet-glow: var(--color-pluton-glow);
+}
+.tcg-card[data-element="neutral"] {
+  --planet-color: var(--color-neutral);
+  --planet-glow: var(--color-neutral-glow);
+}
+
+/* Legendary Golden Frame */
+.tcg-card[data-rarity="Legendary"] {
+  border-color: #fbbf24;
+}
+
+/* ==========================================================================
+   FULL-BLEED CARD IMAGE (OCCUPIES 100% OF THE CARD)
+   ========================================================================== */
+
+.full-card-image,
+.full-card-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  display: block;
+  pointer-events: none;
+  border-radius: calc(var(--radius-md) - 2px);
+}
+
+/* Holographic Foil / 3D Sheen Layer */
+.card-foil-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at var(--foil-x, 50%) var(--foil-y, 50%),
+    rgba(255, 255, 255, 0.32) 0%,
+    rgba(255, 255, 255, 0.08) 40%,
+    transparent 70%
+  );
+  opacity: 0;
+  mix-blend-mode: overlay;
+  transition: opacity 0.2s ease;
+  z-index: 10;
+  border-radius: calc(var(--radius-md) - 2px);
+}
+
+.tcg-card-wrapper:hover .card-foil-sheen {
+  opacity: 1;
+}
+
+.tcg-card[data-rarity="Legendary"] .card-foil-sheen {
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(251, 191, 36, 0.3) 30%,
+    rgba(236, 72, 153, 0.3) 50%,
+    rgba(56, 189, 248, 0.3) 70%,
+    transparent 100%
+  );
+  mix-blend-mode: color-dodge;
+}
+
+/* ==========================================================================
+   DECK & LIBRARY HUD BADGES & OVERLAYS
+   ========================================================================== */
+
+/* Quantity Badge (Top Right of Deck Card) */
+.deck-card-qty-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(14, 20, 36, 0.92);
+  border: 1.5px solid #6366f1;
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  z-index: 15;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.deck-card-qty-badge.is-max {
+  border-color: #fbbf24;
+  color: #fbbf24;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.6);
+}
+
+/* Hover Quick Actions on Deck Card */
+.deck-card-actions-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 10, 19, 0.82);
+  backdrop-filter: blur(5px);
+  opacity: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity var(--transition-fast);
+  z-index: 25;
+  border-radius: calc(var(--radius-md) - 2px);
+  padding: 10px;
+}
+
+.tcg-card-wrapper:hover .deck-card-actions-overlay {
+  opacity: 1;
+}
+
+.deck-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-card-ctrl {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border-medium);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-card-ctrl:hover {
+  background: #6366f1;
+  border-color: #818cf8;
+  transform: scale(1.15);
+}
+
+.btn-card-ctrl.btn-remove:hover {
+  background: #ef4444;
+  border-color: #f87171;
+}
+
+.btn-card-inspect {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-medium);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.btn-card-inspect:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Library Card In-Deck Indicator */
+.library-card-in-deck-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(14, 20, 36, 0.9);
+  border: 1px solid var(--border-medium);
+  color: #94a3b8;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  z-index: 15;
+  backdrop-filter: blur(4px);
+}
+
+.library-card-in-deck-badge.is-max {
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+.tcg-card.is-max-in-deck {
+  filter: saturate(0.85);
+}
