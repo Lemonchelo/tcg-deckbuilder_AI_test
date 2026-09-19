@@ -1931,17 +1931,22 @@
 
   function initCardImporterModal() {
     const modal = document.getElementById('modal-import-images');
-    const openBtn = document.getElementById('btn-import-cards-modal');
-    const closeBtn = document.getElementById('btn-close-import-modal');
-    const dropzone = document.getElementById('import-dropzone');
+    const openBtn = document.getElementById('btn-import-folder');
+    const closeBtn = document.getElementById('btn-close-import-images');
+    const confirmCloseBtn = document.getElementById('btn-confirm-import-close');
+    const dropArea = document.getElementById('import-drop-area');
     const inputFolder = document.getElementById('input-import-folder');
     const inputFiles = document.getElementById('input-import-files');
     const selectFolderBtn = document.getElementById('btn-select-folder');
     const selectFilesBtn = document.getElementById('btn-select-files');
-    const clearDbBtn = document.getElementById('btn-clear-custom-db');
-    const progressWrap = document.getElementById('import-progress-wrap');
-    const progressBar = document.getElementById('import-progress-bar');
+    const clearDbBtn = document.getElementById('btn-clear-custom-cards');
+    const progressBox = document.getElementById('import-progress-box');
+    const progressFill = document.getElementById('import-progress-fill');
     const progressText = document.getElementById('import-progress-text');
+    const resultsSummary = document.getElementById('import-results-summary');
+    const cardsPreview = document.getElementById('import-cards-preview');
+
+    const closeModal = () => { if (modal) modal.classList.remove('is-open'); };
 
     if (openBtn) {
       openBtn.addEventListener('click', () => {
@@ -1950,10 +1955,11 @@
       });
     }
 
-    if (closeBtn && modal) {
-      closeBtn.addEventListener('click', () => modal.classList.remove('is-open'));
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeModal);
+    if (modal) {
       modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.classList.remove('is-open');
+        if (e.target === modal) closeModal();
       });
     }
 
@@ -1967,23 +1973,41 @@
 
     const handleFiles = async (files) => {
       if (!files || files.length === 0) return;
-      if (progressWrap) progressWrap.style.display = 'block';
 
-      showToast(`Procesando ${files.length} archivo(s)...`, 'info');
+      if (progressBox) progressBox.style.display = 'flex';
+      if (resultsSummary) resultsSummary.style.display = 'none';
+      if (cardsPreview) cardsPreview.innerHTML = '';
 
-      const imported = await processImageFiles(files, (curr, total) => {
+      const imported = await processImageFiles(files, (curr, total, card) => {
         const pct = Math.round((curr / total) * 100);
-        if (progressBar) progressBar.style.width = `${pct}%`;
-        if (progressText) progressText.textContent = `Importando ${curr} de ${total} cartas (${pct}%)...`;
+        if (progressFill) progressFill.style.width = `${pct}%`;
+        if (progressText) progressText.textContent = `Procesando: ${curr}/${total}${card ? ' (' + card.name + ')' : ''}`;
       });
 
-      if (progressWrap) {
-        setTimeout(() => { progressWrap.style.display = 'none'; }, 1000);
-      }
+      if (progressBox) progressBox.style.display = 'none';
 
-      showToast(`¡Se importaron ${imported.length} cartas con éxito!`, 'success');
-      renderLibrary();
-      renderDeck();
+      if (imported.length > 0) {
+        playCardDrop();
+        showToast(`¡Se importaron ${imported.length} cartas al catálogo!`, 'success');
+
+        if (resultsSummary && cardsPreview) {
+          resultsSummary.style.display = 'block';
+          imported.forEach(c => {
+            const chip = document.createElement('div');
+            chip.className = 'preview-chip';
+            chip.innerHTML = `
+              <span class="preview-chip-name" title="${c.name}">${c.name}</span>
+              <span class="preview-chip-meta">${c.type} • ${c.cost}💧</span>
+            `;
+            cardsPreview.appendChild(chip);
+          });
+        }
+
+        renderLibrary();
+        renderDeck();
+      } else {
+        showToast('No se encontraron imágenes válidas en la selección.', 'warning');
+      }
     };
 
     if (inputFolder) {
@@ -2000,19 +2024,26 @@
       });
     }
 
-    if (dropzone) {
-      dropzone.addEventListener('dragover', (e) => {
+    if (dropArea) {
+      dropArea.addEventListener('dragenter', (e) => {
         e.preventDefault();
-        dropzone.classList.add('is-drag-over');
+        dropArea.classList.add('is-drag-over');
       });
 
-      dropzone.addEventListener('dragleave', () => {
-        dropzone.classList.remove('is-drag-over');
+      dropArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
       });
 
-      dropzone.addEventListener('drop', (e) => {
+      dropArea.addEventListener('dragleave', (e) => {
+        if (!dropArea.contains(e.relatedTarget)) {
+          dropArea.classList.remove('is-drag-over');
+        }
+      });
+
+      dropArea.addEventListener('drop', (e) => {
         e.preventDefault();
-        dropzone.classList.remove('is-drag-over');
+        dropArea.classList.remove('is-drag-over');
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
           handleFiles(e.dataTransfer.files);
         }
@@ -2027,6 +2058,7 @@
           clearDeck();
           renderLibrary();
           renderDeck();
+          if (resultsSummary) resultsSummary.style.display = 'none';
           showToast('Se eliminaron todas las cartas importadas de la memoria local.', 'info');
         }
       });
