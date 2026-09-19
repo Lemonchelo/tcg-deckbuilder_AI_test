@@ -6,18 +6,20 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 2, 8, 0.88);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(4px);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  visibility: hidden;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
 }
 
 .modal-backdrop.is-open {
+  visibility: visible;
   opacity: 1;
   pointer-events: auto;
 }
@@ -47,7 +49,7 @@
     0 24px 64px rgba(0, 0, 0, 0.95),
     0 0 40px rgba(0, 245, 255, 0.10),
     inset 0 1px 0 rgba(0, 245, 255, 0.12);
-  backdrop-filter: blur(20px);
+  backdrop-filter: none;
   width: 100%;
   max-width: 600px;
   max-height: 90vh;
@@ -571,3 +573,13 @@
   font-size: 9px;
   text-shadow: 0 0 5px var(--cyan-glow-sm);
 }
+
+.modal-inspector > .modal-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 36px;
+  height: 36px;
+  z-index: 3;
+}
+.modal-inspector .inspector-content { padding-top: 48px; }

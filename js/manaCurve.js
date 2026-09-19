@@ -63,7 +63,7 @@ export function renderManaCurve() {
 
   // 2. Cost Bars 1 to 7+
   const labels = ['0', '1', '2', '3', '4', '5', '6', '7+'];
-  for (let idx = 1; idx <= 7; idx++) {
+  for (let idx = 0; idx <= 7; idx++) {
     const count = buckets[idx];
     const heightPercent = count > 0 ? Math.max(14, Math.round((count / maxCount) * 100)) : 0;
     

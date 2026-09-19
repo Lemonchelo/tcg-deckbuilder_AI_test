@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aetherium TCG Deckbuilder Studio</title>
+  <title>STG TCG Deckbuilder</title>
   <meta name="description" content="Creador de mazos para TCG con Facciones Planetarias, Sellos, Mazo Extra de Tokens automático y Drag and Drop.">
   
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   
   <!-- CSS Stylesheets -->
   <link rel="stylesheet" href="css/main.css">
@@ -29,8 +29,8 @@
           <div class="gem-inner"></div>
         </div>
         <div class="brand-text">
-          <h1 class="brand-title">AETHERIUM</h1>
-          <span class="brand-subtitle">Planetary Deckbuilder Studio</span>
+          <h1 class="brand-title">STG TCG</h1>
+          <span class="brand-subtitle">Deckbuilder</span>
         </div>
       </div>
 
@@ -407,8 +407,8 @@
 
     <!-- MODAL: CARD INSPECTOR (3D HD VIEW) -->
     <div class="modal-backdrop" id="modal-card-inspector">
-      <div class="modal-dialog modal-inspector">
-        <button class="modal-close-btn" id="btn-close-inspector">&times;</button>
+      <div class="modal-dialog modal-inspector" role="dialog" aria-modal="true" aria-label="Detalle de carta">
+        <button class="modal-close-btn" id="btn-close-inspector" type="button" aria-label="Cerrar detalle">&times;</button>
         <div class="inspector-content" id="inspector-content">
           <!-- Populated dynamically by JS with 3D card and lore -->
         </div>

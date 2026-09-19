@@ -1,8 +1,10 @@
+import { escapeHtml } from './cardsData.js';
 /**
  * AETHERIUM TCG DECKBUILDER - APPLICATION BOOTSTRAP
  */
 
 import { state, loadInitialState, subscribeToDeck, subscribeToFilters, clearDeck, exportDeckToText, exportDeckToJSON, importDeckFromText, importDeckFromJSON } from './state.js';
+import { initCardInspector } from './cardInspector.js';
 import { initDeckView, renderDeck } from './deckManager.js';
 import { initFilters, renderLibrary } from './filterManager.js';
 import { initDragAndDrop } from './dragAndDrop.js';
@@ -26,7 +28,7 @@ export function showToast(message, type = 'info') {
   toast.className = `toast toast-${type}`;
   toast.innerHTML = `
     <span class="toast-icon">${icons[type] || '✨'}</span>
-    <span class="toast-text">${message}</span>
+    <span class="toast-text">${escapeHtml(message)}</span>
   `;
 
   container.appendChild(toast);
@@ -163,6 +165,7 @@ function initExportImportModal() {
       }
 
       if (res.success) {
+        document.getElementById('deck-name-input').value = state.deckName;
         showToast(`¡Mazo cargado exitosamente (${res.count} cartas)!`, 'success');
         if (modal) modal.classList.remove('is-open');
       } else {
@@ -220,8 +223,12 @@ function initCardImportModal() {
     selectFilesBtn.addEventListener('click', () => filesInput.click());
   }
 
+  let importing = false;
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return;
+    if (importing) return;
+    importing = true;
+    try {
 
     if (progressBox) progressBox.style.display = 'flex';
     if (resultsSummary) resultsSummary.style.display = 'none';
@@ -230,7 +237,7 @@ function initCardImportModal() {
     const imported = await processImageFiles(files, (current, total, card) => {
       const pct = Math.round((current / total) * 100);
       if (progressFill) progressFill.style.width = `${pct}%`;
-      if (progressText) progressText.textContent = `Procesando: ${current}/${total} (${card.name})`;
+      if (progressText) progressText.textContent = `Procesando: ${current}/${total} (${escapeHtml(card.name)})`;
     });
 
     if (progressBox) progressBox.style.display = 'none';
@@ -246,8 +253,8 @@ function initCardImportModal() {
           const chip = document.createElement('div');
           chip.className = 'preview-chip';
           chip.innerHTML = `
-            <span class="preview-chip-name" title="${c.name}">${c.name}</span>
-            <span class="preview-chip-meta">${c.type} • ${c.cost}💧</span>
+            <span class="preview-chip-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+            <span class="preview-chip-meta">${escapeHtml(c.type)} • ${c.cost}💧</span>
           `;
           cardsPreview.appendChild(chip);
         });
@@ -255,8 +262,18 @@ function initCardImportModal() {
 
       renderLibrary();
     } else {
-      showToast('No se encontraron imágenes válidas en la selección.', 'warning');
+      showToast('No hay imágenes nuevas: la selección está vacía, no contiene imágenes o ya fue importada.', 'warning');
     }
+    } catch (error) {
+      showToast(error.message || 'No se pudo completar la importación.', 'danger');
+    } finally {
+      importing = false;
+      if (progressBox) progressBox.style.display = 'none';
+      document.getElementById('input-import-folder').value = '';
+      document.getElementById('input-import-files').value = '';
+      renderLibrary();
+    }
+
   };
 
   if (folderInput) {
@@ -308,6 +325,7 @@ function initCardImportModal() {
 
 // ==================== APP INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', async () => {
+  initCardInspector();
   // 1. Initialize IndexedDB for custom card persistence
   await initIndexedDB();
 

@@ -1,4 +1,4 @@
-# Aetherium TCG Deckbuilder Studio
+# STG TCG Deckbuilder
 
 Constructor de mazos para un TCG con **facciones planetarias**, cartas **Sello** (recursos) y un **Mazo Extra de Tokens** que se genera solo. Funciona 100 % en el navegador, sin dependencias ni backend: tus cartas se importan desde tus propias imágenes y todo se guarda localmente.
 
@@ -25,7 +25,7 @@ Constructor de mazos para un TCG con **facciones planetarias**, cartas **Sello**
 2. Abrí `index.html` en el navegador (doble clic). No necesita servidor ni instalación.
    - Alternativa con servidor local: `python -m http.server 8000` y entrá a `http://localhost:8000`.
    - Las tipografías vienen de Google Fonts; sin internet la app funciona igual, con tipografías de reemplazo.
-3. La app arranca **sin cartas**. Hacé clic en **📁 Importar Cartas** y cargá tus imágenes (ver [Importar cartas](#importar-cartas)).
+3. La app arranca **sin cartas**. Hacé clic en **📁 Importar Cartas → Seleccionar Carpeta** y elegí la carpeta `cartas` incluida en el repositorio para cargar las **464 cartas de Rise of Gods**, o cargá tus propias imágenes (ver [Importar cartas](#importar-cartas)). Consultá [los formatos y límites del catálogo incluido](cartas/README.md).
 4. Armá tu mazo de 40 cartas desde la biblioteca de la derecha.
 
 ---
@@ -186,7 +186,7 @@ Los filtros se combinan entre sí.
 
 En la parte superior del área del mazo:
 
-- **Curva de maná & Sellos:** gráfico de barras con la cantidad de cartas por coste (1 a 7+) y una columna aparte de Sellos (💎S). Muestra el **coste medio** de las cartas (sin contar Sellos). Hacer **clic en una barra** filtra la biblioteca por ese coste máximo; clic en 💎S filtra por Sellos.
+- **Curva de maná & Sellos:** gráfico de barras con la cantidad de cartas por coste (0 a 7+) y una columna aparte de Sellos (💎S). Muestra el **coste medio** de las cartas (sin contar Sellos). Hacer **clic en una barra** filtra la biblioteca por ese coste máximo; clic en 💎S filtra por Sellos.
 - **Composición del mazo:** cantidad de cartas por tipo (Criaturas, H. Rápido, H. Lento, Estructuras, Artefactos, Sellos, Terrenos).
 - **Distribución planetaria:** cuántas cartas tenés de cada planeta.
 
@@ -309,3 +309,11 @@ Al cambiar IDs o estructura del HTML, verificá que los `getElementById` del bun
 
 ---
 
+
+## Verificación de regresiones
+
+Ejecutá `node tests/regression.cjs` para comprobar, tanto en los módulos como en el bundle, los límites de importación, las entradas repetidas y la conservación del mazo ante errores.
+
+Con Playwright disponible y Microsoft Edge instalado, `node tests/browser.cjs` verifica la importación del catálogo, los cierres del inspector, la persistencia, los límites y la selección de cartas en la mano. Usa un perfil aislado. La variable opcional `SCREENSHOT_PATH` permite guardar una captura del detalle.
+
+La identidad visual es STG TCG Deckbuilder. Se mantienen las claves históricas de almacenamiento y el identificador de exportación para conservar la compatibilidad con las colecciones y mazos existentes.

@@ -72,9 +72,9 @@ export function loadInitialState() {
       if (parsed.deckName) state.deckName = parsed.deckName;
       if (Array.isArray(parsed.deck)) {
         state.deck = parsed.deck.filter(item => {
-          const card = getCardById(item.cardId);
+          const card = item && getCardById(item.cardId);
           // Tokens cannot be in the main deck, and cards must exist in CARDS_DATA
-          return card && card.type !== 'Token' && !card.isToken;
+          return item && Number.isSafeInteger(item.count) && item.count > 0 && card && card.type !== 'Token' && !card.isToken;
         });
       }
       if (parsed.cardScale) {
@@ -298,74 +298,52 @@ export function exportDeckToJSON() {
 export function importDeckFromJSON(jsonString) {
   try {
     const data = JSON.parse(jsonString);
-    if (!data.deck || !Array.isArray(data.deck)) {
-      throw new Error('Formato JSON inválido. Debe contener un array "deck".');
+    if (!data || !Array.isArray(data.deck)) throw new Error('Formato JSON inválido: falta el array deck.');
+    const counts = new Map();
+    for (const item of data.deck) {
+      if (!item || !Number.isSafeInteger(item.count) || item.count <= 0) throw new Error('Cada cantidad debe ser un entero positivo.');
+      const card = getCardById(item.cardId) || (typeof item.name === 'string' && CARDS_DATA.find(c => c.name.toLowerCase() === item.name.toLowerCase()));
+      if (!card) throw new Error('Carta no encontrada: ' + (item.name || item.cardId || '(sin nombre)'));
+      if (card.isToken || card.type === 'Token') throw new Error('Los tokens no pertenecen al mazo principal.');
+      const count = (counts.get(card.id) || 0) + item.count;
+      if (count > getMaxAllowedCopies(card.id)) throw new Error('Límite de copias excedido: ' + card.name);
+      counts.set(card.id, count);
     }
-
-    const newDeck = [];
-    let importedCount = 0;
-
-    data.deck.forEach(item => {
-      let card = getCardById(item.cardId);
-      if (!card && item.name) {
-        card = CARDS_DATA.find(c => c.name.toLowerCase() === item.name.toLowerCase());
-      }
-
-      if (card && card.type !== 'Token' && !card.isToken) {
-        const maxAllowed = getMaxAllowedCopies(card.id);
-        const count = Math.min(Math.max(1, parseInt(item.count, 10) || 1), maxAllowed);
-        newDeck.push({ cardId: card.id, count });
-        importedCount += count;
-      }
-    });
-
-    if (data.deckName) {
-      state.deckName = data.deckName;
-    }
-
-    state.deck = newDeck;
+    const total = [...counts.values()].reduce((a,b) => a+b, 0);
+    if (total > state.maxDeckSize) throw new Error('El mazo no puede superar las 40 cartas.');
+    if (data.deckName !== undefined && typeof data.deckName !== 'string') throw new Error('Nombre de mazo inválido.');
+    state.deck = [...counts].map(([cardId,count]) => ({cardId,count}));
+    if (data.deckName !== undefined) state.deckName = data.deckName.trim().slice(0,32) || 'Mi Mazo de Batalla';
     notifyDeckChanged();
-    return { success: true, count: importedCount };
+    return {success:true, count:total};
   } catch (err) {
-    return { success: false, error: err.message };
+    return {success:false, error:err.message, reason:err.message};
   }
 }
 
 export function importDeckFromText(textString) {
   try {
-    const lines = textString.split('\n');
-    const newDeck = [];
-    let importedCount = 0;
-
-    lines.forEach(line => {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) {
-        if (trimmed.startsWith('// Deck:')) {
-          state.deckName = trimmed.replace('// Deck:', '').trim();
-        }
-        return;
-      }
-
-      const match = trimmed.match(/^(\d+)[xX]?\s+(.+)$/);
-      if (match) {
-        const qty = parseInt(match[1], 10);
-        let rawName = match[2].trim();
-        rawName = rawName.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim();
-
-        const card = CARDS_DATA.find(c => c.name.toLowerCase() === rawName.toLowerCase() || c.id === rawName);
-        if (card && card.type !== 'Token' && !card.isToken) {
-          const maxAllowed = getMaxAllowedCopies(card.id);
-          const count = Math.min(qty, maxAllowed);
-          newDeck.push({ cardId: card.id, count });
-          importedCount += count;
-        }
-      }
-    });
-
-    state.deck = newDeck;
-    notifyDeckChanged();
-    return { success: true, count: importedCount };
+    const data = {deck: []};
+    let extra = false;
+    for (const line of textString.split('\n')) {
+      const value = line.trim();
+      if (!value) continue;
+      if (value.startsWith('// Extra Deck')) { extra = true; continue; }
+      if (value.startsWith('// Deck:')) data.deckName = value.slice(8).trim();
+      if (value.startsWith('//') || value.startsWith('#') || extra) continue;
+      const match = value.match(/^(\d+)[xX]?\s+(.+)$/);
+      if (!match) throw new Error('Línea inválida: ' + value);
+      const name = match[2].replace(/\s+\[[^\]]*\]\s+\([^)]*\)$/, '').trim();
+      data.deck.push({name, cardId:name, count:Number(match[1])});
+    }
+    if (!data.deck.length) throw new Error('No se encontraron cartas en el texto.');
+    return importDeckFromJSON(JSON.stringify(data));
   } catch (err) {
-    return { success: false, error: err.message };
+    return {success:false, error:err.message, reason:err.message};
   }
+}
+
+export function setCardScale(scale) {
+  state.filters.cardScale = Math.max(0.75, Math.min(1.35, scale));
+  saveToLocalStorage();
 }

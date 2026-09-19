@@ -2,7 +2,7 @@
  * AETHERIUM TCG DECKBUILDER STUDIO - STANDALONE BUNDLE
  * Zero-dependency standalone application bundle.
  * Fully supports direct local execution via file:/// double-click on Windows.
- * 
+ *
  * Rules:
  * - 40 Cards Main Deck
  * - Dynamic Rarity Limits: Common (4), Rare (3), Epic (2), Legendary (1)
@@ -14,6 +14,10 @@
 
 (function() {
   'use strict';
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
+}
+
 
   // ==========================================================================
   // 1. CARDS DATA & CONSTANTS
@@ -70,7 +74,7 @@
 
       <!-- Top Header Banner -->
       <rect x="12" y="14" width="226" height="34" rx="6" fill="rgba(8,12,24,0.85)" stroke="${accentColor || '#38bdf8'}" stroke-width="1.5"/>
-      
+
       <!-- Cost / Sello Icon -->
       <circle cx="30" cy="31" r="15" fill="url(#gem_${name.replace(/\s+/g, '')})" stroke="#ffffff" stroke-width="2" filter="url(#glow_${name.replace(/\s+/g, '')})"/>
       <text x="30" y="36" font-family="'JetBrains Mono', monospace" font-size="${isSello ? '11' : '14'}" font-weight="900" fill="#ffffff" text-anchor="middle">${isSello ? '💎' : cost}</text>
@@ -84,7 +88,7 @@
       <!-- Central Art Window -->
       <rect x="16" y="54" width="218" height="155" rx="8" fill="#060913" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
       <circle cx="125" cy="130" r="50" fill="${accentColor || '#38bdf8'}" opacity="0.25" filter="url(#glow_${name.replace(/\s+/g, '')})"/>
-      
+
       ${isSello ? `
         <circle cx="125" cy="130" r="40" fill="none" stroke="${accentColor || '#38bdf8'}" stroke-width="4" stroke-dasharray="8 4"/>
         <polygon points="125,95 155,145 95,145" fill="${accentColor || '#38bdf8'}" opacity="0.8"/>
@@ -154,17 +158,12 @@
   }
 
   function saveCustomCardToDB(card) {
-    if (!dbInstance) return Promise.resolve();
-    return new Promise((resolve) => {
-      try {
-        const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        store.put(card);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => resolve();
-      } catch (e) {
-        resolve();
-      }
+    if (!dbInstance) return Promise.reject(new Error('No está disponible el almacenamiento de cartas en este navegador.'));
+    return new Promise((resolve, reject) => {
+      const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(card);
+      tx.oncomplete = () => resolve();
+      tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo guardar la carta. Revisá el espacio disponible.'));
     });
   }
 
@@ -352,31 +351,28 @@
   }
 
   async function processImageFiles(files, onProgress) {
-    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-    const importedCards = [];
-
-    for (let i = 0; i < imageFiles.length; i++) {
-      const file = imageFiles[i];
+    const images = Array.from(files).filter(f => f.type.startsWith('image/'));
+    const imported = [];
+    for (let i = 0; i < images.length; i++) {
+      const file = images[i];
       const dataUrl = await readFileAsDataURL(file);
       const card = parseCardFilename(file.name, dataUrl);
-
-      await saveCustomCardToDB(card);
-      CARDS_DATA.push(card);
-      importedCards.push(card);
-
-      if (onProgress) {
-        onProgress(i + 1, imageFiles.length, card);
+      const exists = CARDS_DATA.some(c => c.name === card.name && c.type === card.type && c.element === card.element && c.imageUrl === dataUrl);
+      if (!exists) {
+        await saveCustomCardToDB(card);
+        CARDS_DATA.push(card);
+        imported.push(card);
       }
+      if (onProgress) onProgress(i + 1, images.length, card);
     }
-
-    return importedCards;
+    return imported;
   }
 
   function readFileAsDataURL(file) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = () => resolve('');
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reader.onabort = () => reject(new Error('No se pudo leer: ' + file.name));
       reader.readAsDataURL(file);
     });
   }
@@ -449,8 +445,8 @@
         if (parsed.deckName) state.deckName = parsed.deckName;
         if (Array.isArray(parsed.deck)) {
           state.deck = parsed.deck.filter(item => {
-            const card = getCardById(item.cardId);
-            return card && card.type !== 'Token' && !card.isToken;
+            const card = item && getCardById(item.cardId);
+            return item && Number.isSafeInteger(item.count) && item.count > 0 && card && card.type !== 'Token' && !card.isToken;
           });
         }
         if (parsed.cardScale) {
@@ -488,9 +484,9 @@
     if (!card) return { allowed: false, reason: 'Carta no encontrada' };
 
     if (card.type === 'Token' || card.isToken) {
-      return { 
-        allowed: false, 
-        reason: 'Las cartas Token pertenecen al Mazo Extra y se agregan automáticamente según las facciones del mazo.' 
+      return {
+        allowed: false,
+        reason: 'Las cartas Token pertenecen al Mazo Extra y se agregan automáticamente según las facciones del mazo.'
       };
     }
 
@@ -504,18 +500,18 @@
 
     if (currentCount >= maxAllowed) {
       if (card.type === 'Sello' || card.isSello || !card.rarity) {
-        return { 
-          allowed: false, 
-          reason: 'El mazo ya alcanzó el límite de 40 cartas.' 
+        return {
+          allowed: false,
+          reason: 'El mazo ya alcanzó el límite de 40 cartas.'
         };
       }
       const rarityLabel = card.rarity === 'Legendary' ? 'Legendarias (máx. 1)' :
         card.rarity === 'Epic' ? 'Épicas (máx. 2)' :
         card.rarity === 'Rare' ? 'Raras (máx. 3)' : 'Comunes (máx. 4)';
 
-      return { 
-        allowed: false, 
-        reason: `Límite alcanzado para cartas ${rarityLabel}` 
+      return {
+        allowed: false,
+        reason: `Límite alcanzado para cartas ${rarityLabel}`
       };
     }
 
@@ -614,7 +610,7 @@
       const card = getCardById(item.cardId);
       if (card) {
         const typeStr = card.type === 'Sello' ? '[Sello]' : `[${card.rarity || 'Sin Rareza'}]`;
-        text += `${item.count}x ${card.name} ${typeStr} (${card.element.toUpperCase()})\n`;
+        text += `${item.count}x ${escapeHtml(card.name)} ${typeStr} (${card.element.toUpperCase()})\n`;
       }
     });
 
@@ -648,72 +644,48 @@
   function importDeckFromJSON(jsonString) {
     try {
       const data = JSON.parse(jsonString);
-      if (!data.deck || !Array.isArray(data.deck)) {
-        throw new Error('Formato JSON inválido. Debe contener un array "deck".');
+      if (!data || !Array.isArray(data.deck)) throw new Error('Formato JSON inválido: falta el array deck.');
+      const counts = new Map();
+      for (const item of data.deck) {
+        if (!item || !Number.isSafeInteger(item.count) || item.count <= 0) throw new Error('Cada cantidad debe ser un entero positivo.');
+        const card = getCardById(item.cardId) || (typeof item.name === 'string' && CARDS_DATA.find(c => c.name.toLowerCase() === item.name.toLowerCase()));
+        if (!card) throw new Error('Carta no encontrada: ' + (item.name || item.cardId || '(sin nombre)'));
+        if (card.isToken || card.type === 'Token') throw new Error('Los tokens no pertenecen al mazo principal.');
+        const count = (counts.get(card.id) || 0) + item.count;
+        if (count > getMaxAllowedCopies(card.id)) throw new Error('Límite de copias excedido: ' + card.name);
+        counts.set(card.id, count);
       }
-
-      const newDeck = [];
-      let importedCount = 0;
-
-      data.deck.forEach(item => {
-        let card = getCardById(item.cardId);
-        if (!card && item.name) {
-          card = CARDS_DATA.find(c => c.name.toLowerCase() === item.name.toLowerCase());
-        }
-
-        if (card && card.type !== 'Token' && !card.isToken) {
-          const maxAllowed = getMaxAllowedCopies(card.id);
-          const count = Math.min(Math.max(1, parseInt(item.count, 10) || 1), maxAllowed);
-          newDeck.push({ cardId: card.id, count });
-          importedCount += count;
-        }
-      });
-
-      if (data.deckName) state.deckName = data.deckName;
-      state.deck = newDeck;
+      const total = [...counts.values()].reduce((a,b) => a+b, 0);
+      if (total > state.maxDeckSize) throw new Error('El mazo no puede superar las 40 cartas.');
+      if (data.deckName !== undefined && typeof data.deckName !== 'string') throw new Error('Nombre de mazo inválido.');
+      state.deck = [...counts].map(([cardId,count]) => ({cardId,count}));
+      if (data.deckName !== undefined) state.deckName = data.deckName.trim().slice(0,32) || 'Mi Mazo de Batalla';
       notifyDeckChanged();
-      return { success: true, count: importedCount };
+      return {success:true, count:total};
     } catch (err) {
-      return { success: false, error: err.message };
+      return {success:false, error:err.message, reason:err.message};
     }
   }
 
   function importDeckFromText(textString) {
     try {
-      const lines = textString.split('\n');
-      const newDeck = [];
-      let importedCount = 0;
-
-      lines.forEach(line => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) {
-          if (trimmed.startsWith('// Deck:')) {
-            state.deckName = trimmed.replace('// Deck:', '').trim();
-          }
-          return;
-        }
-
-        const match = trimmed.match(/^(\d+)[xX]?\s+(.+)$/);
-        if (match) {
-          const qty = parseInt(match[1], 10);
-          let rawName = match[2].trim();
-          rawName = rawName.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim();
-
-          const card = CARDS_DATA.find(c => c.name.toLowerCase() === rawName.toLowerCase() || c.id === rawName);
-          if (card && card.type !== 'Token' && !card.isToken) {
-            const maxAllowed = getMaxAllowedCopies(card.id);
-            const count = Math.min(qty, maxAllowed);
-            newDeck.push({ cardId: card.id, count });
-            importedCount += count;
-          }
-        }
-      });
-
-      state.deck = newDeck;
-      notifyDeckChanged();
-      return { success: true, count: importedCount };
+      const data = {deck: []};
+      let extra = false;
+      for (const line of textString.split('\n')) {
+        const value = line.trim();
+        if (!value) continue;
+        if (value.startsWith('// Extra Deck')) { extra = true; continue; }
+        if (value.startsWith('// Deck:')) data.deckName = value.slice(8).trim();
+        if (value.startsWith('//') || value.startsWith('#') || extra) continue;
+        const match = value.match(/^(\d+)[xX]?\s+(.+)$/);
+        if (!match) throw new Error('Línea inválida: ' + value);
+        const name = match[2].replace(/\s+\[[^\]]*\]\s+\([^)]*\)$/, '').trim();
+        data.deck.push({name, cardId:name, count:Number(match[1])});
+      }
+      if (!data.deck.length) throw new Error('No se encontraron cartas en el texto.');
+      return importDeckFromJSON(JSON.stringify(data));
     } catch (err) {
-      return { success: false, error: err.message };
+      return {success:false, error:err.message, reason:err.message};
     }
   }
 
@@ -818,18 +790,18 @@
       `;
     }
 
-    const cardGraphic = card.imageUrl 
-      ? `<img src="${card.imageUrl}" alt="${card.name}" class="full-card-image" loading="lazy">` 
+    const cardGraphic = card.imageUrl
+      ? `<img src="${escapeHtml(card.imageUrl)}" alt="${escapeHtml(card.name)}" class="full-card-image" loading="lazy">`
       : (card.artSvg || '');
 
     wrapper.innerHTML = `
-      <div class="tcg-card ${isMaxInDeck ? 'is-max-in-deck' : ''}" 
-           data-element="${card.element || 'neutral'}" 
+      <div class="tcg-card ${isMaxInDeck ? 'is-max-in-deck' : ''}"
+           data-element="${card.element || 'neutral'}"
            data-rarity="${card.rarity || 'none'}"
            draggable="${draggable}"
            tabindex="0"
            role="button"
-           aria-label="${card.name}, ${card.element}, Coste ${card.cost}">
+           aria-label="${escapeHtml(card.name)}, ${escapeHtml(card.element)}, Coste ${card.cost}">
         ${cardGraphic}
         <div class="card-foil-sheen"></div>
         ${inDeckBadgeHtml}
@@ -846,34 +818,27 @@
   function attach3DTiltEffect(wrapper) {
     const card = wrapper.querySelector('.tcg-card');
     if (!card) return;
-
-    let bounds;
-
-    function onMouseEnter() { bounds = card.getBoundingClientRect(); }
-    function onMouseMove(e) {
-      if (!bounds) bounds = card.getBoundingClientRect();
-      const mouseX = e.clientX - bounds.left;
-      const mouseY = e.clientY - bounds.top;
-      const leftX = mouseX - bounds.width / 2;
-      const topY = mouseY - bounds.height / 2;
-      const rx = -(topY / (bounds.height / 2)) * 14;
-      const ry = (leftX / (bounds.width / 2)) * 14;
-      const foilX = (mouseX / bounds.width) * 100;
-      const foilY = (mouseY / bounds.height) * 100;
-
-      card.style.transform = `perspective(1000px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateY(-4px)`;
-      card.style.setProperty('--foil-x', `${foilX.toFixed(1)}%`);
-      card.style.setProperty('--foil-y', `${foilY.toFixed(1)}%`);
-    }
-
-    function onMouseLeave() {
+    let frame = 0, latest;
+    const reset = () => {
+      cancelAnimationFrame(frame); frame = 0;
       card.style.transform = '';
-      bounds = null;
-    }
-
-    wrapper.addEventListener('mouseenter', onMouseEnter);
-    wrapper.addEventListener('mousemove', onMouseMove);
-    wrapper.addEventListener('mouseleave', onMouseLeave);
+    };
+    wrapper.addEventListener('mousemove', e => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      latest = e;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const bounds = wrapper.getBoundingClientRect();
+        const x = (latest.clientX - bounds.left) / bounds.width;
+        const y = (latest.clientY - bounds.top) / bounds.height;
+        card.style.transform = `perspective(1000px) rotateX(${(0.5-y)*16}deg) rotateY(${(x-0.5)*16}deg) translateY(-3px)`;
+        card.style.setProperty('--foil-x', `${x*100}%`);
+        card.style.setProperty('--foil-y', `${y*100}%`);
+      });
+    });
+    wrapper.addEventListener('mouseleave', reset);
+    wrapper.addEventListener('dragstart', reset);
   }
 
   function openCardInspector(cardId) {
@@ -893,7 +858,7 @@
 
     const rarityBadgeHtml = isSello
       ? `<span class="inspector-badge" style="background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid #10b981;">🏛️ Sello (Sin Límite)</span>`
-      : `<span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: #fbbf24; border: 1px solid #fbbf24;">💎 ${card.rarity}</span>`;
+      : `<span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: #fbbf24; border: 1px solid #fbbf24;">💎 ${escapeHtml(card.rarity)}</span>`;
 
     const addBtnText = isSello
       ? `<span>+</span> Agregar al Mazo (x${currentInDeck})`
@@ -902,13 +867,13 @@
     content.innerHTML = `
       <div class="inspector-card-col" id="inspector-card-container"></div>
       <div class="inspector-details-col">
-        <div class="inspector-name">${card.name}</div>
+        <div class="inspector-name">${escapeHtml(card.name)}</div>
         <div class="inspector-meta-row">
           <span class="inspector-badge" style="background: ${elementInfo.glow}; color: #ffffff; border: 1px solid ${elementInfo.color};">
             ${elementInfo.icon} ${elementInfo.name}
           </span>
           <span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: var(--text-secondary); border: 1px solid var(--border-medium);">
-            ${card.type}
+            ${escapeHtml(card.type)}
           </span>
           ${rarityBadgeHtml}
           <span class="inspector-badge" style="background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid #38bdf8;">
@@ -925,15 +890,15 @@
         </div>
 
         <div class="inspector-desc-box">
-          <p>${card.description}</p>
+          <p>${escapeHtml(card.description)}</p>
         </div>
 
         <div class="inspector-flavor">
-          ${card.flavor}
+          ${escapeHtml(card.flavor)}
         </div>
 
         <div class="inspector-actions">
-          <button id="btn-inspector-add" class="btn btn-primary" ${!isSello && currentInDeck >= maxCopies ? 'disabled' : ''}>
+          <button id="btn-inspector-add" class="btn btn-primary" ${!canAddCardToDeck(card.id).allowed ? 'disabled' : ''}>
             ${addBtnText}
           </button>
         </div>
@@ -954,12 +919,34 @@
       });
     }
 
-    modal.classList.add('is-open');
+    if (!modal.classList.contains('is-open')) modal.returnFocus = document.activeElement;
+  modal.classList.add('is-open');
+  document.getElementById('btn-close-inspector')?.focus();
   }
+
+function initCardInspector() {
+  const modal = document.getElementById('modal-card-inspector');
+  const close = document.getElementById('btn-close-inspector');
+  close?.addEventListener('click', closeCardInspector);
+  modal?.addEventListener('click', event => {
+    if (event.target === modal) closeCardInspector();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Tab' && modal?.classList.contains('is-open')) {
+      const controls = [...modal.querySelectorAll('button:not(:disabled), [tabindex="0"]')];
+      const index = controls.indexOf(document.activeElement);
+      if (event.shiftKey && index <= 0) { event.preventDefault(); controls.at(-1)?.focus(); }
+      else if (!event.shiftKey && (index < 0 || index === controls.length-1)) { event.preventDefault(); controls[0]?.focus(); }
+    }
+    if (event.key === 'Escape' && modal?.classList.contains('is-open')) {
+      event.preventDefault(); closeCardInspector();
+    }
+  });
+}
 
   function closeCardInspector() {
     const modal = document.getElementById('modal-card-inspector');
-    if (modal) modal.classList.remove('is-open');
+    if (modal) { modal.classList.remove('is-open'); modal.returnFocus?.focus(); }
   }
 
   // ==========================================================================
@@ -1018,10 +1005,10 @@
 
     // Cost Bars 1 to 7+
     const labels = ['0', '1', '2', '3', '4', '5', '6', '7+'];
-    for (let idx = 1; idx <= 7; idx++) {
+    for (let idx = 0; idx <= 7; idx++) {
       const count = buckets[idx];
       const heightPercent = count > 0 ? Math.max(14, Math.round((count / maxCount) * 100)) : 0;
-      
+
       const col = document.createElement('div');
       col.className = 'mana-bar-col';
       col.title = `Coste ${labels[idx]}: ${count} carta(s). Clic para filtrar.`;
@@ -1078,6 +1065,7 @@
             e.stopPropagation();
             const res = addCardToDeck(cardId);
             if (res.success) {
+        document.getElementById('deck-name-input').value = state.deckName;
               playCardDrop();
             } else {
               showToast(res.reason, 'warning');
@@ -1280,7 +1268,8 @@
 
       scaleSlider.addEventListener('input', (e) => {
         const scale = parseFloat(e.target.value);
-        setFilter('cardScale', scale);
+        state.filters.cardScale = scale;
+        saveToLocalStorage();
         if (scaleValueText) scaleValueText.textContent = `${Math.round(scale * 100)}%`;
         applyCardScale(scale);
       });
@@ -1485,7 +1474,8 @@
       if (emptyState) emptyState.style.display = 'flex';
     } else {
       if (emptyState) emptyState.style.display = 'none';
-      libraryGrid.innerHTML = '';
+      const previous = new Map([...libraryGrid.querySelectorAll('.tcg-card-wrapper')].map(node => [node.dataset.cardId, node]));
+    const fragment = document.createDocumentFragment();
 
       filtered.forEach(card => {
         const currentInDeck = getCardCountInDeck(card.id);
@@ -1493,13 +1483,23 @@
         const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
         const isMaxInDeck = !isSello && currentInDeck >= maxAllowed;
 
-        const cardElem = createCardElement(card, {
+        const cardElem = previous.get(card.id) || createCardElement(card, {
           isDeckItem: false,
           isMaxInDeck,
           draggable: card.type !== 'Token' && !card.isToken
         });
-        libraryGrid.appendChild(cardElem);
+        const face = cardElem.querySelector('.tcg-card');
+      face.classList.toggle('is-max-in-deck', isMaxInDeck);
+      let badge = face.querySelector('.library-card-in-deck-badge');
+      if (currentInDeck > 0) {
+        if (!badge) { badge = document.createElement('div'); face.appendChild(badge); }
+        badge.className = 'library-card-in-deck-badge' + (isMaxInDeck ? ' is-max' : '');
+        badge.textContent = isSello ? `x${currentInDeck}` : `${currentInDeck}/${maxAllowed}`;
+        badge.title = `${currentInDeck} copias en el mazo`;
+      } else if (badge) badge.remove();
+      fragment.appendChild(cardElem);
       });
+    libraryGrid.replaceChildren(fragment);
     }
   }
 
@@ -1766,29 +1766,45 @@
   }
 
   function renderHand() {
-    const container = document.getElementById('test-hand-cards-grid');
-    const remainingCountElem = document.getElementById('test-hand-remaining-count');
-    if (!container) return;
+    const cardsContainer = document.getElementById('test-hand-cards');
+    const statsContainer = document.getElementById('test-hand-stats');
+    const avgManaSpan = document.getElementById('hand-avg-mana');
 
-    if (remainingCountElem) remainingCountElem.textContent = remainingDeck.length;
-    container.innerHTML = '';
+    if (!cardsContainer) return;
+    cardsContainer.innerHTML = '';
 
+    let manaSum = 0;
     currentHand.forEach((item, index) => {
-      const cardWrapper = createCardElement(item.card, {
+      manaSum += item.card.cost;
+
+      const cardElem = createCardElement(item.card, {
         isHandItem: true,
         draggable: false
       });
 
-      if (item.selectedForMulligan) cardWrapper.classList.add('selected-for-mulligan');
+      if (item.selectedForMulligan) {
+        cardElem.classList.add('is-selected-mulligan');
+      }
 
-      cardWrapper.addEventListener('click', () => {
+      // Toggle selection on click
+      cardElem.addEventListener('click', () => {
         playClick();
         item.selectedForMulligan = !item.selectedForMulligan;
-        cardWrapper.classList.toggle('selected-for-mulligan', item.selectedForMulligan);
+        cardElem.classList.toggle('is-selected-mulligan', item.selectedForMulligan);
       });
 
-      container.appendChild(cardWrapper);
+      cardsContainer.appendChild(cardElem);
     });
+
+    const avgCost = currentHand.length > 0 ? (manaSum / currentHand.length).toFixed(1) : '0.0';
+    if (avgManaSpan) avgManaSpan.textContent = `Coste promedio en mano: ${avgCost}`;
+    if (statsContainer) {
+      statsContainer.innerHTML = `
+        <span>Mano actual: <strong>${currentHand.length}</strong> cartas</span> &bull;
+        <span>Restantes en mazo: <strong>${remainingDeck.length}</strong></span> &bull;
+        <span>Coste medio: <strong>${avgCost}</strong></span>
+      `;
+    }
   }
 
   // ==========================================================================
@@ -1803,7 +1819,7 @@
     toast.className = `toast toast-${type}`;
     toast.innerHTML = `
       <span class="toast-icon">${icons[type] || '✨'}</span>
-      <span class="toast-text">${message}</span>
+      <span class="toast-text">${escapeHtml(message)}</span>
     `;
 
     container.appendChild(toast);
@@ -1920,6 +1936,7 @@
         }
 
         if (res.success) {
+        document.getElementById('deck-name-input').value = state.deckName;
           showToast(`¡Mazo importado con éxito (${res.count} cartas cargadas)!`, 'success');
           if (modal) modal.classList.remove('is-open');
         } else {
@@ -1971,8 +1988,12 @@
       selectFilesBtn.addEventListener('click', () => inputFiles.click());
     }
 
-    const handleFiles = async (files) => {
+    let importing = false;
+  const handleFiles = async (files) => {
       if (!files || files.length === 0) return;
+    if (importing) return;
+    importing = true;
+    try {
 
       if (progressBox) progressBox.style.display = 'flex';
       if (resultsSummary) resultsSummary.style.display = 'none';
@@ -1996,8 +2017,8 @@
             const chip = document.createElement('div');
             chip.className = 'preview-chip';
             chip.innerHTML = `
-              <span class="preview-chip-name" title="${c.name}">${c.name}</span>
-              <span class="preview-chip-meta">${c.type} • ${c.cost}💧</span>
+              <span class="preview-chip-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+              <span class="preview-chip-meta">${escapeHtml(c.type)} • ${c.cost}💧</span>
             `;
             cardsPreview.appendChild(chip);
           });
@@ -2006,8 +2027,18 @@
         renderLibrary();
         renderDeck();
       } else {
-        showToast('No se encontraron imágenes válidas en la selección.', 'warning');
+        showToast('No hay imágenes nuevas: la selección está vacía, no contiene imágenes o ya fue importada.', 'warning');
       }
+    } catch (error) {
+      showToast(error.message || 'No se pudo completar la importación.', 'danger');
+    } finally {
+      importing = false;
+      if (progressBox) progressBox.style.display = 'none';
+      document.getElementById('input-import-folder').value = '';
+      document.getElementById('input-import-files').value = '';
+      renderLibrary();
+    }
+
     };
 
     if (inputFolder) {
@@ -2069,6 +2100,7 @@
   // INITIALIZATION ON DOM READY
   // ==========================================================================
   document.addEventListener('DOMContentLoaded', async () => {
+  initCardInspector();
     // 1. Initialize IndexedDB and load saved custom cards
     await initIndexedDB();
 

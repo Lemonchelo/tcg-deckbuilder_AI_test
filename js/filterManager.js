@@ -4,7 +4,7 @@
  */
 
 import { CARDS_DATA } from './cardsData.js';
-import { state, setFilter, resetFilters, addCardToDeck, canAddCardToDeck, getCardCountInDeck, getMaxAllowedCopies } from './state.js';
+import { state, setCardScale, setFilter, resetFilters, addCardToDeck, canAddCardToDeck, getCardCountInDeck, getMaxAllowedCopies } from './state.js';
 import { createCardElement, openCardInspector } from './cardInspector.js';
 import { playClick, playCardDrop } from './sound.js';
 import { showToast } from './app.js';
@@ -44,7 +44,7 @@ export function initFilters() {
 
     scaleSlider.addEventListener('input', (e) => {
       const scale = parseFloat(e.target.value);
-      setFilter('cardScale', scale);
+      setCardScale(scale);
       if (scaleValueText) {
         scaleValueText.textContent = `${Math.round(scale * 100)}%`;
       }
@@ -286,7 +286,8 @@ export function renderLibrary() {
     if (emptyState) emptyState.style.display = 'flex';
   } else {
     if (emptyState) emptyState.style.display = 'none';
-    libraryGrid.innerHTML = '';
+    const previous = new Map([...libraryGrid.querySelectorAll('.tcg-card-wrapper')].map(node => [node.dataset.cardId, node]));
+    const fragment = document.createDocumentFragment();
 
     filtered.forEach(card => {
       const currentInDeck = getCardCountInDeck(card.id);
@@ -294,12 +295,22 @@ export function renderLibrary() {
       const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
       const isMaxInDeck = !isSello && currentInDeck >= maxAllowed;
 
-      const cardElem = createCardElement(card, {
+      const cardElem = previous.get(card.id) || createCardElement(card, {
         isDeckItem: false,
         isMaxInDeck,
         draggable: card.type !== 'Token' && !card.isToken
       });
-      libraryGrid.appendChild(cardElem);
+      const face = cardElem.querySelector('.tcg-card');
+      face.classList.toggle('is-max-in-deck', isMaxInDeck);
+      let badge = face.querySelector('.library-card-in-deck-badge');
+      if (currentInDeck > 0) {
+        if (!badge) { badge = document.createElement('div'); face.appendChild(badge); }
+        badge.className = 'library-card-in-deck-badge' + (isMaxInDeck ? ' is-max' : '');
+        badge.textContent = isSello ? `x${currentInDeck}` : `${currentInDeck}/${maxAllowed}`;
+        badge.title = `${currentInDeck} copias en el mazo`;
+      } else if (badge) badge.remove();
+      fragment.appendChild(cardElem);
     });
+    libraryGrid.replaceChildren(fragment);
   }
 }

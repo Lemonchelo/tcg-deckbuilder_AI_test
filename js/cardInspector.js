@@ -2,7 +2,7 @@
  * 3D HOLOGRAPHIC TILT & FULL-CARD RENDERING / INSPECTOR
  */
 
-import { getCardById, ELEMENTS } from './cardsData.js';
+import { getCardById, ELEMENTS, escapeHtml } from './cardsData.js';
 import { addCardToDeck, canAddCardToDeck, getCardCountInDeck, getMaxAllowedCopies } from './state.js';
 import { playClick, playCardDrop } from './sound.js';
 
@@ -60,7 +60,7 @@ export function createCardElement(card, options = {}) {
 
   // Full-bleed Card Graphic (100% of card)
   const cardGraphic = card.imageUrl 
-    ? `<img src="${card.imageUrl}" alt="${card.name}" class="full-card-image" loading="lazy">` 
+    ? `<img src="${escapeHtml(card.imageUrl)}" alt="${escapeHtml(card.name)}" class="full-card-image" loading="lazy">`
     : (card.artSvg || '');
 
   wrapper.innerHTML = `
@@ -70,7 +70,7 @@ export function createCardElement(card, options = {}) {
          draggable="${draggable}"
          tabindex="0"
          role="button"
-         aria-label="${card.name}, ${card.element}, Coste ${card.cost}">
+         aria-label="${escapeHtml(card.name)}, ${escapeHtml(card.element)}, Coste ${card.cost}">
       
       <!-- Full Card Graphic -->
       ${cardGraphic}
@@ -100,40 +100,27 @@ export function createCardElement(card, options = {}) {
 export function attach3DTiltEffect(wrapper) {
   const card = wrapper.querySelector('.tcg-card');
   if (!card) return;
-
-  let bounds;
-
-  function onMouseEnter() {
-    bounds = card.getBoundingClientRect();
-  }
-
-  function onMouseMove(e) {
-    if (!bounds) bounds = card.getBoundingClientRect();
-    const mouseX = e.clientX - bounds.left;
-    const mouseY = e.clientY - bounds.top;
-
-    const leftX = mouseX - bounds.width / 2;
-    const topY = mouseY - bounds.height / 2;
-
-    const rx = -(topY / (bounds.height / 2)) * 14;
-    const ry = (leftX / (bounds.width / 2)) * 14;
-
-    const foilX = (mouseX / bounds.width) * 100;
-    const foilY = (mouseY / bounds.height) * 100;
-
-    card.style.transform = `perspective(1000px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateY(-4px)`;
-    card.style.setProperty('--foil-x', `${foilX.toFixed(1)}%`);
-    card.style.setProperty('--foil-y', `${foilY.toFixed(1)}%`);
-  }
-
-  function onMouseLeave() {
+  let frame = 0, latest;
+  const reset = () => {
+    cancelAnimationFrame(frame); frame = 0;
     card.style.transform = '';
-    bounds = null;
-  }
-
-  wrapper.addEventListener('mouseenter', onMouseEnter);
-  wrapper.addEventListener('mousemove', onMouseMove);
-  wrapper.addEventListener('mouseleave', onMouseLeave);
+  };
+  wrapper.addEventListener('mousemove', e => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    latest = e;
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const bounds = wrapper.getBoundingClientRect();
+      const x = (latest.clientX - bounds.left) / bounds.width;
+      const y = (latest.clientY - bounds.top) / bounds.height;
+      card.style.transform = `perspective(1000px) rotateX(${(0.5-y)*16}deg) rotateY(${(x-0.5)*16}deg) translateY(-3px)`;
+      card.style.setProperty('--foil-x', `${x*100}%`);
+      card.style.setProperty('--foil-y', `${y*100}%`);
+    });
+  });
+  wrapper.addEventListener('mouseleave', reset);
+  wrapper.addEventListener('dragstart', reset);
 }
 
 /**
@@ -156,7 +143,7 @@ export function openCardInspector(cardId) {
 
   const rarityBadgeHtml = isSello
     ? `<span class="inspector-badge" style="background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid #10b981;">🏛️ Sello (Sin Límite)</span>`
-    : `<span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: #fbbf24; border: 1px solid #fbbf24;">💎 ${card.rarity}</span>`;
+    : `<span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: #fbbf24; border: 1px solid #fbbf24;">💎 ${escapeHtml(card.rarity)}</span>`;
 
   const addBtnText = isSello
     ? `<span>+</span> Agregar al Mazo (x${currentInDeck})`
@@ -167,13 +154,13 @@ export function openCardInspector(cardId) {
       <!-- Full Card injected below -->
     </div>
     <div class="inspector-details-col">
-      <div class="inspector-name">${card.name}</div>
+      <div class="inspector-name">${escapeHtml(card.name)}</div>
       <div class="inspector-meta-row">
         <span class="inspector-badge" style="background: ${elementInfo.glow}; color: #ffffff; border: 1px solid ${elementInfo.color};">
           ${elementInfo.icon} ${elementInfo.name}
         </span>
         <span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: var(--text-secondary); border: 1px solid var(--border-medium);">
-          ${card.type}
+          ${escapeHtml(card.type)}
         </span>
         ${rarityBadgeHtml}
         <span class="inspector-badge" style="background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid #38bdf8;">
@@ -190,15 +177,15 @@ export function openCardInspector(cardId) {
       </div>
 
       <div class="inspector-desc-box">
-        <p>${card.description}</p>
+        <p>${escapeHtml(card.description)}</p>
       </div>
 
       <div class="inspector-flavor">
-        ${card.flavor}
+        ${escapeHtml(card.flavor)}
       </div>
 
       <div class="inspector-actions">
-        <button id="btn-inspector-add" class="btn btn-primary" ${!isSello && currentInDeck >= maxCopies ? 'disabled' : ''}>
+        <button id="btn-inspector-add" class="btn btn-primary" ${!canAddCardToDeck(card.id).allowed ? 'disabled' : ''}>
           ${addBtnText}
         </button>
       </div>
@@ -221,21 +208,32 @@ export function openCardInspector(cardId) {
     });
   }
 
+  if (!modal.classList.contains('is-open')) modal.returnFocus = document.activeElement;
   modal.classList.add('is-open');
+  document.getElementById('btn-close-inspector')?.focus();
 }
 
 export function closeCardInspector() {
   const modal = document.getElementById('modal-card-inspector');
-  if (modal) modal.classList.remove('is-open');
+  if (modal) { modal.classList.remove('is-open'); modal.returnFocus?.focus(); }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const closeBtn = document.getElementById('btn-close-inspector');
+export function initCardInspector() {
   const modal = document.getElementById('modal-card-inspector');
-  if (closeBtn) closeBtn.addEventListener('click', closeCardInspector);
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeCardInspector();
-    });
-  }
-});
+  const close = document.getElementById('btn-close-inspector');
+  close?.addEventListener('click', closeCardInspector);
+  modal?.addEventListener('click', event => {
+    if (event.target === modal) closeCardInspector();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Tab' && modal?.classList.contains('is-open')) {
+      const controls = [...modal.querySelectorAll('button:not(:disabled), [tabindex="0"]')];
+      const index = controls.indexOf(document.activeElement);
+      if (event.shiftKey && index <= 0) { event.preventDefault(); controls.at(-1)?.focus(); }
+      else if (!event.shiftKey && (index < 0 || index === controls.length-1)) { event.preventDefault(); controls[0]?.focus(); }
+    }
+    if (event.key === 'Escape' && modal?.classList.contains('is-open')) {
+      event.preventDefault(); closeCardInspector();
+    }
+  });
+}
