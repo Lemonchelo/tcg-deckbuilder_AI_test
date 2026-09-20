@@ -31,3 +31,60 @@ function checkState(source, label) {
 }
 checkState(bundle,'Standalone bundle');
 checkState(['cardsData.js','state.js'].map(p=>fs.readFileSync(path.join(root,'js',p),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'')).join('\n'),'Modules');
+
+function checkSideDeckAndBanlist(source, label) {
+  const ctx = vm.createContext({document:{addEventListener(){}}, localStorage:{getItem(){return null},setItem(){}}, console});
+  const api = 'globalThis.api = { CARDS_DATA, state, importDeckFromJSON, exportDeckToJSON, getDeckTotalCount, addCardToDeck, removeCardFromDeck, canAddCardToDeck, getMaxAllowedCopies, getCombinedCardCount, setBanlistLimit, clearBanlistLimit, getBanlistLimit };';
+  vm.runInContext(source.includes('(function()') ? source.replace(/\}\)\(\);\s*$/, api+'})();') : source+'\n'+api, ctx);
+  const a = ctx.api;
+  a.CARDS_DATA.push({id:'a',name:'Alpha',rarity:'Common',type:'Criatura',element:'marte'}, {id:'l',name:'Legend',rarity:'Legendary',type:'Criatura',element:'marte'});
+
+  // Shared copy limit between Main Deck and Side Deck: Alpha (Common, limit 4)
+  assert(a.addCardToDeck('a', 'main').success); // main: 1
+  assert(a.addCardToDeck('a', 'main').success); // main: 2
+  assert(a.addCardToDeck('a', 'side').success); // side: 1 (combined 3)
+  assert.equal(a.getCombinedCardCount('a'), 3);
+  assert(a.addCardToDeck('a', 'side').success); // side: 2 (combined 4, at limit)
+  assert.equal(a.canAddCardToDeck('a', 'main').allowed, false, 'Shared limit should block a 5th combined copy from either deck');
+  assert.equal(a.canAddCardToDeck('a', 'side').allowed, false);
+
+  // Side Deck has its own 15-card size ceiling, independent of the Main Deck's 40
+  assert.equal(a.state.maxSideDeckSize, 15);
+
+  // Banlist overrides the rarity-based limit and is shared between Main + Side Deck
+  assert.equal(a.getMaxAllowedCopies('l'), 1); // Legendary default
+  assert(a.setBanlistLimit('l', 8).success);
+  assert.equal(a.getMaxAllowedCopies('l'), 8);
+  assert(a.addCardToDeck('l', 'main').success);
+  for (let i = 0; i < 6; i++) a.addCardToDeck('l', 'side'); // side: up to 7 total combined
+  assert.equal(a.getCombinedCardCount('l'), 7);
+  assert(a.canAddCardToDeck('l', 'main').allowed); // 8th copy still allowed under banlist override
+  assert(a.addCardToDeck('l', 'main').success);
+  assert.equal(a.canAddCardToDeck('l', 'main').allowed, false, 'Banlist limit of 8 should now block further copies');
+
+  // Clearing the banlist entry restores the rarity default
+  a.clearBanlistLimit('l');
+  assert.equal(a.getBanlistLimit('l'), undefined);
+  assert.equal(a.getMaxAllowedCopies('l'), 1);
+
+  // Export/import round-trip preserves both Main Deck and Side Deck contents
+  a.state.deck = [{cardId:'a', count:2}];
+  a.state.sideDeck = [{cardId:'a', count:2}];
+  const json = a.exportDeckToJSON();
+  const parsed = JSON.parse(json);
+  assert(Array.isArray(parsed.sideDeck) && parsed.sideDeck.length === 1, 'exportDeckToJSON should include sideDeck');
+  a.state.deck = [];
+  a.state.sideDeck = [];
+  const res = a.importDeckFromJSON(json);
+  assert(res.success);
+  assert.equal(a.getDeckTotalCount('main'), 2);
+  assert.equal(a.getDeckTotalCount('side'), 2);
+
+  // Import rejects a combined main+side quantity that exceeds the shared per-card limit
+  const overLimit = a.importDeckFromJSON(JSON.stringify({ deck: [{cardId:'a', count:3}], sideDeck: [{cardId:'a', count:2}] }));
+  assert.equal(overLimit.success, false, 'Combined main+side quantity over the shared limit must be rejected');
+
+  console.log(label+': side deck shared limits, banlist overrides and export/import round-trips passed');
+}
+checkSideDeckAndBanlist(bundle, 'Standalone bundle');
+checkSideDeckAndBanlist(['cardsData.js','state.js'].map(p=>fs.readFileSync(path.join(root,'js',p),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'')).join('\n'), 'Modules');

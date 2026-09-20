@@ -355,6 +355,43 @@
   transition: gap 0.2s ease;
 }
 
+/* ── Drag-to-Remove Hint (dropping a deck/side-deck card here removes it) ─── */
+.library-remove-hint {
+  position: absolute;
+  inset: 14px;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.98);
+  transition: all var(--t-normal);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(255, 26, 60, 0.06);
+  border: 1px dashed rgba(255, 26, 60, 0.4);
+  color: #ff6680;
+  font-family: var(--font-hud);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  clip-path: var(--clip-bevel);
+}
+
+.library-grid.is-remove-target ~ .library-remove-hint {
+  opacity: 0.6;
+  transform: scale(1);
+}
+
+.library-grid.is-drag-over ~ .library-remove-hint {
+  opacity: 1;
+  border-color: var(--crimson);
+  background: rgba(255, 26, 60, 0.18);
+  color: #ffffff;
+  box-shadow: 0 0 24px var(--crimson-glow);
+}
+
 /* ── Empty State ─────────────────────────────────────────────────────────── */
 .library-empty,
 .library-empty-collection {

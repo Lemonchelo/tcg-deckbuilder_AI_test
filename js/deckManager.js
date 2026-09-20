@@ -1,6 +1,7 @@
 /**
  * DECK VIEW MANAGER
- * Renders Main 40-Card Deck, composition stats, and Automated Extra Deck (Tokens).
+ * Renders Main Deck, Side Deck (shares copy limits with Main Deck), composition stats,
+ * and Automated Extra Deck (Tokens).
  */
 
 import { state, addCardToDeck, removeCardFromDeck, getDeckTotalCount, setDeckName, getActiveExtraDeckTokens } from './state.js';
@@ -12,6 +13,7 @@ import { showToast } from './app.js';
 
 export function initDeckView() {
   const deckGrid = document.getElementById('deck-grid');
+  const sideDeckGrid = document.getElementById('side-deck-grid');
   const extraDeckGrid = document.getElementById('extra-deck-grid');
   const deckNameInput = document.getElementById('deck-name-input');
 
@@ -22,48 +24,8 @@ export function initDeckView() {
     });
   }
 
-  // Event Delegation on Main Deck
-  if (deckGrid) {
-    deckGrid.addEventListener('click', (e) => {
-      const btn = e.target.closest('button');
-      const cardWrapper = e.target.closest('.tcg-card-wrapper');
-      if (!cardWrapper) return;
-
-      const cardId = cardWrapper.dataset.cardId;
-      if (!cardId) return;
-
-      if (btn) {
-        const action = btn.dataset.action;
-        if (action === 'increment') {
-          e.stopPropagation();
-          const res = addCardToDeck(cardId);
-          if (res.success) {
-            playCardDrop();
-          } else {
-            showToast(res.reason, 'warning');
-          }
-        } else if (action === 'decrement') {
-          e.stopPropagation();
-          removeCardFromDeck(cardId, false);
-          playCardRemove();
-        } else if (action === 'inspect') {
-          e.stopPropagation();
-          openCardInspector(cardId);
-        }
-      } else {
-        openCardInspector(cardId);
-      }
-    });
-
-    deckGrid.addEventListener('dblclick', (e) => {
-      const cardWrapper = e.target.closest('.tcg-card-wrapper');
-      if (cardWrapper && cardWrapper.dataset.cardId) {
-        e.stopPropagation();
-        removeCardFromDeck(cardWrapper.dataset.cardId, false);
-        playCardRemove();
-      }
-    });
-  }
+  setupDeckGridInteractions(deckGrid, 'main');
+  setupDeckGridInteractions(sideDeckGrid, 'side');
 
   // Event Delegation on Extra Deck (Tokens - View only, click opens inspector)
   if (extraDeckGrid) {
@@ -76,64 +38,92 @@ export function initDeckView() {
   }
 }
 
+function setupDeckGridInteractions(gridEl, target) {
+  if (!gridEl) return;
+
+  gridEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    const cardWrapper = e.target.closest('.tcg-card-wrapper');
+    if (!cardWrapper) return;
+
+    const cardId = cardWrapper.dataset.cardId;
+    if (!cardId) return;
+
+    if (btn) {
+      const action = btn.dataset.action;
+      if (action === 'increment') {
+        e.stopPropagation();
+        const res = addCardToDeck(cardId, target);
+        if (res.success) {
+          playCardDrop();
+        } else {
+          showToast(res.reason, 'warning');
+        }
+      } else if (action === 'decrement') {
+        e.stopPropagation();
+        removeCardFromDeck(cardId, false, target);
+        playCardRemove();
+      } else if (action === 'inspect') {
+        e.stopPropagation();
+        openCardInspector(cardId);
+      }
+    } else {
+      openCardInspector(cardId);
+    }
+  });
+
+  gridEl.addEventListener('dblclick', (e) => {
+    const cardWrapper = e.target.closest('.tcg-card-wrapper');
+    if (cardWrapper && cardWrapper.dataset.cardId) {
+      e.stopPropagation();
+      removeCardFromDeck(cardWrapper.dataset.cardId, false, target);
+      playCardRemove();
+    }
+  });
+}
+
 export function renderDeck() {
   const deckGrid = document.getElementById('deck-grid');
-  const extraDeckGrid = document.getElementById('extra-deck-grid');
   const emptyState = document.getElementById('deck-empty-state');
-  const extraEmptyState = document.getElementById('extra-empty-state');
   const totalCountElem = document.getElementById('deck-total-count');
-  const extraCountElem = document.getElementById('extra-tokens-count');
   const statusBadge = document.getElementById('deck-status-badge');
   const countPill = document.getElementById('deck-count-pill');
 
   if (!deckGrid) return;
 
-  const totalCount = getDeckTotalCount();
+  const totalCount = getDeckTotalCount('main');
 
-  // 1. Update Navbar Count and Legality Status (Exactly 40 cards)
+  // 1. Update Navbar Count and Legality Status
   if (totalCountElem) totalCountElem.textContent = totalCount;
 
   if (countPill && statusBadge) {
     countPill.classList.remove('is-valid', 'is-over');
     statusBadge.className = 'deck-status-badge';
 
-    if (totalCount === 40) {
+    if (totalCount === state.maxDeckSize) {
       countPill.classList.add('is-valid');
       statusBadge.classList.add('is-ready');
-      statusBadge.textContent = 'Listo (40/40)';
-    } else if (totalCount > 40) {
+      statusBadge.textContent = `Listo (${totalCount}/${state.maxDeckSize})`;
+    } else if (totalCount > state.maxDeckSize) {
       countPill.classList.add('is-over');
       statusBadge.classList.add('is-overlimit');
-      statusBadge.textContent = `Exceso (${totalCount}/40)`;
+      statusBadge.textContent = `Exceso (${totalCount}/${state.maxDeckSize})`;
     } else {
       statusBadge.classList.add('is-incomplete');
-      statusBadge.textContent = `Incompleto (${totalCount}/40)`;
+      statusBadge.textContent = `Incompleto (${totalCount}/${state.maxDeckSize})`;
     }
   }
 
   // 2. Render Main Deck Grid
-  if (state.deck.length === 0) {
-    deckGrid.innerHTML = '';
-    if (emptyState) emptyState.style.display = 'flex';
-  } else {
-    if (emptyState) emptyState.style.display = 'none';
-    deckGrid.innerHTML = '';
+  renderDeckGrid(deckGrid, state.deck, emptyState);
 
-    state.deck.forEach((item, index) => {
-      const card = getCardById(item.cardId);
-      if (!card) return;
+  // 3. Render Side Deck
+  renderSideDeck();
 
-      const cardElem = createCardElement(card, {
-        isDeckItem: true,
-        deckCount: item.count,
-        draggable: true
-      });
-      cardElem.dataset.deckIndex = index;
-      deckGrid.appendChild(cardElem);
-    });
-  }
-
-  // 3. Render Automated Extra Deck (Tokens)
+  // 4. Render Automated Extra Deck (Tokens)
+  const extraDeckGrid = document.getElementById('extra-deck-grid');
+  const extraEmptyState = document.getElementById('extra-empty-state');
+  const extraCountElem = document.getElementById('extra-tokens-count');
   const activeTokens = getActiveExtraDeckTokens();
   if (extraCountElem) extraCountElem.textContent = activeTokens.length;
 
@@ -155,11 +145,52 @@ export function renderDeck() {
     }
   }
 
-  // 4. Update Composition Breakdown
+  // 5. Update Composition Breakdown
   updateDeckComposition();
 
-  // 5. Update Mana Curve Chart
+  // 6. Update Mana Curve Chart
   renderManaCurve();
+}
+
+function renderDeckGrid(gridEl, deckArr, emptyStateEl) {
+  if (!gridEl) return;
+  if (deckArr.length === 0) {
+    gridEl.innerHTML = '';
+    if (emptyStateEl) emptyStateEl.style.display = 'flex';
+  } else {
+    if (emptyStateEl) emptyStateEl.style.display = 'none';
+    gridEl.innerHTML = '';
+
+    deckArr.forEach((item, index) => {
+      const card = getCardById(item.cardId);
+      if (!card) return;
+
+      const cardElem = createCardElement(card, {
+        isDeckItem: true,
+        deckCount: item.count,
+        draggable: true
+      });
+      cardElem.dataset.deckIndex = index;
+      gridEl.appendChild(cardElem);
+    });
+  }
+}
+
+function renderSideDeck() {
+  const sideDeckGrid = document.getElementById('side-deck-grid');
+  const sideEmptyState = document.getElementById('side-deck-empty-state');
+  const sideTotalElem = document.getElementById('side-deck-total-count');
+  const sideCountPill = document.getElementById('side-deck-count-pill');
+
+  const sideTotal = getDeckTotalCount('side');
+  if (sideTotalElem) sideTotalElem.textContent = sideTotal;
+  if (sideCountPill) {
+    sideCountPill.classList.toggle('is-over', sideTotal > state.maxSideDeckSize);
+    sideCountPill.classList.toggle('is-valid', sideTotal === state.maxSideDeckSize);
+  }
+
+  if (!sideDeckGrid) return;
+  renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState);
 }
 
 function updateDeckComposition() {

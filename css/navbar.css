@@ -193,6 +193,15 @@
   text-shadow: 0 0 10px var(--crimson-glow);
 }
 
+/* ── Side Deck Pill (variant of .deck-count-pill) ─────────────────────────── */
+.side-deck-count-pill {
+  border-color: rgba(56, 189, 248, 0.30);
+}
+.side-deck-count-pill .count-value {
+  color: #38bdf8;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+}
+
 /* ── Extra Token Pill ───────────────────────────────────────────────────── */
 .extra-tokens-pill {
   display: flex;

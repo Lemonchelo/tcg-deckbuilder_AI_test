@@ -1,6 +1,8 @@
 /**
  * DRAG AND DROP ENGINE
- * Native HTML5 Drag and Drop with visual dropzones, trash removal, and reordering.
+ * Native HTML5 Drag and Drop with visual dropzones and reordering.
+ * Cards are removed from a deck by dragging them onto the Card Library display
+ * (no separate trash bar is needed).
  */
 
 import { addCardToDeck, removeCardFromDeck, reorderDeck, canAddCardToDeck } from './state.js';
@@ -10,11 +12,74 @@ import { getCardById } from './cardsData.js';
 
 let draggedData = null;
 
+function parsePayload(e) {
+  let payload = draggedData;
+  if (!payload) {
+    try {
+      const json = e.dataTransfer.getData('application/json');
+      if (json) payload = JSON.parse(json);
+    } catch {
+      const textCardId = e.dataTransfer.getData('text/plain');
+      if (textCardId) payload = { source: 'library', cardId: textCardId, index: -1 };
+    }
+  }
+  return payload;
+}
+
+function setupDeckDropzone(dropzoneEl, gridSelector, target) {
+  if (!dropzoneEl) return;
+
+  dropzoneEl.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    if (draggedData) dropzoneEl.classList.add('is-drag-over');
+  });
+
+  dropzoneEl.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = draggedData && draggedData.source === 'library' ? 'copy' : 'move';
+  });
+
+  dropzoneEl.addEventListener('dragleave', (e) => {
+    if (!dropzoneEl.contains(e.relatedTarget)) {
+      dropzoneEl.classList.remove('is-drag-over');
+    }
+  });
+
+  dropzoneEl.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzoneEl.classList.remove('is-drag-over');
+
+    const payload = parsePayload(e);
+    if (!payload || !payload.cardId) return;
+
+    if (payload.source === 'library') {
+      const check = canAddCardToDeck(payload.cardId, target);
+      if (check.allowed) {
+        addCardToDeck(payload.cardId, target);
+        playCardDrop();
+        const card = getCardById(payload.cardId);
+        showToast(`Agregado: ${card ? card.name : 'Carta'} al ${target === 'side' ? 'Side Deck' : 'mazo'}`, 'success');
+      } else {
+        showToast(check.reason, 'warning');
+      }
+    } else if (payload.source === target) {
+      // Reordering within the same deck: find if dropped over another card of that deck
+      const targetCardWrapper = e.target.closest(`${gridSelector} .tcg-card-wrapper`);
+      if (targetCardWrapper && targetCardWrapper.dataset.deckIndex !== undefined) {
+        const targetIndex = parseInt(targetCardWrapper.dataset.deckIndex, 10);
+        if (payload.index !== -1 && targetIndex !== payload.index) {
+          reorderDeck(payload.index, targetIndex, target);
+          playCardDrop();
+        }
+      }
+    }
+  });
+}
+
 export function initDragAndDrop() {
   const deckDropzone = document.getElementById('deck-dropzone');
-  const trashDropzone = document.getElementById('trash-dropzone');
-
-  if (!deckDropzone || !trashDropzone) return;
+  const sideDeckDropzone = document.getElementById('side-deck-dropzone');
+  const libraryGrid = document.getElementById('library-grid');
 
   // Global Drag Start Listener (Delegated)
   document.addEventListener('dragstart', (e) => {
@@ -25,13 +90,14 @@ export function initDragAndDrop() {
     if (!wrapper) return;
 
     const cardId = wrapper.dataset.cardId;
-    const isDeckItem = wrapper.closest('.deck-grid') !== null;
-    const isLibraryItem = wrapper.closest('.library-grid') !== null;
-
     if (!cardId) return;
 
-    const source = isDeckItem ? 'deck' : (isLibraryItem ? 'library' : 'other');
-    const index = isDeckItem ? parseInt(wrapper.dataset.deckIndex, 10) : -1;
+    const isMainItem = wrapper.closest('#deck-grid') !== null;
+    const isSideItem = wrapper.closest('#side-deck-grid') !== null;
+    const isLibraryItem = wrapper.closest('#library-grid') !== null;
+
+    const source = isMainItem ? 'main' : (isSideItem ? 'side' : (isLibraryItem ? 'library' : 'other'));
+    const index = (isMainItem || isSideItem) ? parseInt(wrapper.dataset.deckIndex, 10) : -1;
 
     draggedData = { source, cardId, index };
 
@@ -43,9 +109,9 @@ export function initDragAndDrop() {
     cardElem.classList.add('is-dragging');
     playCardPickup();
 
-    // If dragging from deck, activate trash dropzone
-    if (isDeckItem) {
-      trashDropzone.classList.add('is-active');
+    // Dragging a deck card highlights the library as the drop-to-remove target
+    if ((isMainItem || isSideItem) && libraryGrid) {
+      libraryGrid.classList.add('is-remove-target');
     }
   });
 
@@ -55,108 +121,52 @@ export function initDragAndDrop() {
     if (cardElem) cardElem.classList.remove('is-dragging');
 
     if (deckDropzone) deckDropzone.classList.remove('is-drag-over');
-    if (trashDropzone) {
-      trashDropzone.classList.remove('is-active');
-      trashDropzone.classList.remove('is-drag-over');
+    if (sideDeckDropzone) sideDeckDropzone.classList.remove('is-drag-over');
+    if (libraryGrid) {
+      libraryGrid.classList.remove('is-remove-target');
+      libraryGrid.classList.remove('is-drag-over');
     }
 
     draggedData = null;
   });
 
-  // ==================== DECK DROPZONE HANDLERS ====================
-  deckDropzone.addEventListener('dragenter', (e) => {
-    e.preventDefault();
-    if (draggedData) {
-      deckDropzone.classList.add('is-drag-over');
-    }
-  });
+  // ==================== MAIN & SIDE DECK DROPZONES ====================
+  setupDeckDropzone(deckDropzone, '#deck-grid', 'main');
+  setupDeckDropzone(sideDeckDropzone, '#side-deck-grid', 'side');
 
-  deckDropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = draggedData && draggedData.source === 'library' ? 'copy' : 'move';
-  });
-
-  deckDropzone.addEventListener('dragleave', (e) => {
-    // Only remove if leaving outer boundary
-    if (!deckDropzone.contains(e.relatedTarget)) {
-      deckDropzone.classList.remove('is-drag-over');
-    }
-  });
-
-  deckDropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    deckDropzone.classList.remove('is-drag-over');
-
-    let payload = draggedData;
-    if (!payload) {
-      try {
-        const json = e.dataTransfer.getData('application/json');
-        if (json) payload = JSON.parse(json);
-      } catch {
-        const textCardId = e.dataTransfer.getData('text/plain');
-        if (textCardId) payload = { source: 'library', cardId: textCardId };
+  // ==================== CARD LIBRARY AS REMOVAL TARGET ====================
+  if (libraryGrid) {
+    libraryGrid.addEventListener('dragenter', (e) => {
+      if (draggedData && (draggedData.source === 'main' || draggedData.source === 'side')) {
+        e.preventDefault();
+        libraryGrid.classList.add('is-drag-over');
       }
-    }
+    });
 
-    if (!payload || !payload.cardId) return;
+    libraryGrid.addEventListener('dragover', (e) => {
+      if (draggedData && (draggedData.source === 'main' || draggedData.source === 'side')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      }
+    });
 
-    if (payload.source === 'library') {
-      // Add card from library to deck
-      const check = canAddCardToDeck(payload.cardId);
-      if (check.allowed) {
-        addCardToDeck(payload.cardId);
-        playCardDrop();
+    libraryGrid.addEventListener('dragleave', (e) => {
+      if (!libraryGrid.contains(e.relatedTarget)) {
+        libraryGrid.classList.remove('is-drag-over');
+      }
+    });
+
+    libraryGrid.addEventListener('drop', (e) => {
+      const payload = parsePayload(e);
+      libraryGrid.classList.remove('is-drag-over');
+
+      if (payload && (payload.source === 'main' || payload.source === 'side') && payload.cardId) {
+        e.preventDefault();
+        removeCardFromDeck(payload.cardId, true, payload.source);
+        playCardRemove();
         const card = getCardById(payload.cardId);
-        showToast(`Agregado: ${card ? card.name : 'Carta'} al mazo`, 'success');
-      } else {
-        showToast(check.reason, 'warning');
+        showToast(`Removido: ${card ? card.name : 'Carta'} del ${payload.source === 'side' ? 'Side Deck' : 'mazo'}`, 'info');
       }
-    } else if (payload.source === 'deck') {
-      // Reordering within deck: find if dropped over another deck card
-      const targetCardWrapper = e.target.closest('.deck-grid .tcg-card-wrapper');
-      if (targetCardWrapper && targetCardWrapper.dataset.deckIndex !== undefined) {
-        const targetIndex = parseInt(targetCardWrapper.dataset.deckIndex, 10);
-        if (payload.index !== -1 && targetIndex !== payload.index) {
-          reorderDeck(payload.index, targetIndex);
-          playCardDrop();
-        }
-      }
-    }
-  });
-
-  // ==================== TRASH DROPZONE HANDLERS ====================
-  trashDropzone.addEventListener('dragenter', (e) => {
-    e.preventDefault();
-    trashDropzone.classList.add('is-drag-over');
-  });
-
-  trashDropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  });
-
-  trashDropzone.addEventListener('dragleave', (e) => {
-    trashDropzone.classList.remove('is-drag-over');
-  });
-
-  trashDropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    trashDropzone.classList.remove('is-drag-over');
-    trashDropzone.classList.remove('is-active');
-
-    let payload = draggedData;
-    if (!payload) {
-      try {
-        const json = e.dataTransfer.getData('application/json');
-        if (json) payload = JSON.parse(json);
-      } catch {}
-    }
-
-    if (payload && payload.source === 'deck' && payload.cardId) {
-      removeCardFromDeck(payload.cardId, true);
-      playCardRemove();
-      const card = getCardById(payload.cardId);
-      showToast(`Removido: ${card ? card.name : 'Carta'} del mazo`, 'info');
-    }
-  });
+    });
+  }
 }

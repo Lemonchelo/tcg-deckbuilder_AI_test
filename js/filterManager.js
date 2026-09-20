@@ -4,7 +4,7 @@
  */
 
 import { CARDS_DATA } from './cardsData.js';
-import { state, setCardScale, setFilter, resetFilters, addCardToDeck, canAddCardToDeck, getCardCountInDeck, getMaxAllowedCopies } from './state.js';
+import { state, setCardScale, setFilter, resetFilters, addCardToDeck, canAddCardToDeck, getCombinedCardCount, getMaxAllowedCopies, isCardBanlisted } from './state.js';
 import { createCardElement, openCardInspector } from './cardInspector.js';
 import { playClick, playCardDrop } from './sound.js';
 import { showToast } from './app.js';
@@ -290,9 +290,10 @@ export function renderLibrary() {
     const fragment = document.createDocumentFragment();
 
     filtered.forEach(card => {
-      const currentInDeck = getCardCountInDeck(card.id);
+      const currentInDeck = getCombinedCardCount(card.id);
       const maxAllowed = getMaxAllowedCopies(card.id);
       const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+      const banlisted = isCardBanlisted(card.id);
       const isMaxInDeck = !isSello && currentInDeck >= maxAllowed;
 
       const cardElem = previous.get(card.id) || createCardElement(card, {
@@ -302,13 +303,23 @@ export function renderLibrary() {
       });
       const face = cardElem.querySelector('.tcg-card');
       face.classList.toggle('is-max-in-deck', isMaxInDeck);
+      face.classList.toggle('is-banlisted', banlisted);
+
       let badge = face.querySelector('.library-card-in-deck-badge');
       if (currentInDeck > 0) {
         if (!badge) { badge = document.createElement('div'); face.appendChild(badge); }
         badge.className = 'library-card-in-deck-badge' + (isMaxInDeck ? ' is-max' : '');
-        badge.textContent = isSello ? `x${currentInDeck}` : `${currentInDeck}/${maxAllowed}`;
-        badge.title = `${currentInDeck} copias en el mazo`;
+        badge.textContent = isSello && !banlisted ? `x${currentInDeck}` : `${currentInDeck}/${maxAllowed}`;
+        badge.title = `${currentInDeck} copias entre Mazo Principal y Side Deck`;
       } else if (badge) badge.remove();
+
+      let banBadge = face.querySelector('.card-banlist-badge');
+      if (banlisted) {
+        if (!banBadge) { banBadge = document.createElement('div'); banBadge.className = 'card-banlist-badge'; face.appendChild(banBadge); }
+        banBadge.textContent = `🚫 ${maxAllowed}`;
+        banBadge.title = `Restricción de Banlist: máximo ${maxAllowed} copias entre Mazo Principal y Side Deck`;
+      } else if (banBadge) banBadge.remove();
+
       fragment.appendChild(cardElem);
     });
     libraryGrid.replaceChildren(fragment);

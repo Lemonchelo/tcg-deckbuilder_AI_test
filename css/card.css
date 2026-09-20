@@ -259,6 +259,37 @@
   filter: saturate(0.85);
 }
 
+/* Banlist Restriction Badge (bottom-left, distinct from the in-deck counter badge) */
+.card-banlist-badge {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  background: rgba(30, 4, 8, 0.92);
+  border: 1.5px solid #ef4444;
+  color: #f87171;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  z-index: 16;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.tcg-card.is-banlisted {
+  border-color: #ef4444;
+}
+
+/* Card Inspector: clicking the card opens a fullscreen zoom view */
+.tcg-card.is-zoomable {
+  cursor: zoom-in;
+}
+
+.tcg-card.is-fullscreen-face {
+  cursor: zoom-out;
+}
+
 @media (hover: hover) {
   .tcg-card-wrapper:hover .tcg-card { will-change: transform; }
 }

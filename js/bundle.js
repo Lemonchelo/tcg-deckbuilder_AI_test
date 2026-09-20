@@ -381,6 +381,7 @@ function escapeHtml(value) {
   // 3. REACTIVE STATE & DECK RULES
   // ==========================================================================
   const STORAGE_KEY = 'aetherium_tcg_active_deck';
+  const STORAGE_KEY_BANLIST = 'aetherium_tcg_banlist';
 
   const RARITY_LIMITS = {
     Common: 4,
@@ -391,8 +392,11 @@ function escapeHtml(value) {
 
   const state = {
     deckName: 'Mi Mazo de Batalla',
-    deck: [],
+    deck: [], // Main Deck
+    sideDeck: [], // Side Deck (shares copy limits with Main Deck)
     maxDeckSize: 40,
+    maxSideDeckSize: 15,
+    banlist: {}, // { [cardId]: customCopyLimit } — persists independently of the active deck
     filters: {
       search: '',
       element: 'all',
@@ -404,9 +408,14 @@ function escapeHtml(value) {
     }
   };
 
+  function deckArrayFor(target) {
+    return target === 'side' ? state.sideDeck : state.deck;
+  }
+
   const listeners = {
     deck: [],
-    filters: []
+    filters: [],
+    banlist: []
   };
 
   function subscribeToDeck(callback) {
@@ -415,6 +424,10 @@ function escapeHtml(value) {
 
   function subscribeToFilters(callback) {
     listeners.filters.push(callback);
+  }
+
+  function subscribeToBanlist(callback) {
+    listeners.banlist.push(callback);
   }
 
   function notifyDeckChanged() {
@@ -426,60 +439,133 @@ function escapeHtml(value) {
     listeners.filters.forEach(cb => cb(state.filters, state));
   }
 
+  function notifyBanlistChanged() {
+    listeners.banlist.forEach(cb => cb(state.banlist, state));
+  }
+
   function saveToLocalStorage() {
     try {
       const dataToSave = {
         deckName: state.deckName,
         deck: state.deck,
+        sideDeck: state.sideDeck,
         cardScale: state.filters.cardScale
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (err) {}
   }
 
+  function saveBanlistToLocalStorage() {
+    try {
+      localStorage.setItem(STORAGE_KEY_BANLIST, JSON.stringify(state.banlist));
+    } catch (err) {}
+  }
+
+  function loadBanlistFromLocalStorage() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_BANLIST);
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object') {
+        Object.entries(parsed).forEach(([cardId, limit]) => {
+          if (Number.isSafeInteger(limit) && limit >= 0 && limit <= state.maxDeckSize) {
+            state.banlist[cardId] = limit;
+          }
+        });
+      }
+    } catch (err) {}
+  }
+
+  function isValidDeckItem(item) {
+    const card = item && getCardById(item.cardId);
+    return !!(item && Number.isSafeInteger(item.count) && item.count > 0 && card && card.type !== 'Token' && !card.isToken);
+  }
+
   function loadInitialState() {
+    loadBanlistFromLocalStorage();
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.deckName) state.deckName = parsed.deckName;
         if (Array.isArray(parsed.deck)) {
-          state.deck = parsed.deck.filter(item => {
-            const card = item && getCardById(item.cardId);
-            return item && Number.isSafeInteger(item.count) && item.count > 0 && card && card.type !== 'Token' && !card.isToken;
-          });
+          state.deck = parsed.deck.filter(isValidDeckItem);
+        }
+        if (Array.isArray(parsed.sideDeck)) {
+          state.sideDeck = parsed.sideDeck.filter(isValidDeckItem);
         }
         if (parsed.cardScale) {
           state.filters.cardScale = Math.max(0.75, Math.min(1.35, parsed.cardScale));
         }
       } else {
         state.deck = [];
+        state.sideDeck = [];
       }
     } catch (err) {
       state.deck = [];
+      state.sideDeck = [];
     }
   }
 
-  function getDeckTotalCount() {
-    return state.deck.reduce((sum, item) => sum + item.count, 0);
+  function getDeckTotalCount(target = 'main') {
+    return deckArrayFor(target).reduce((sum, item) => sum + item.count, 0);
   }
 
-  function getCardCountInDeck(cardId) {
-    const found = state.deck.find(item => item.cardId === cardId);
+  function getCardCountInDeck(cardId, target = 'main') {
+    const found = deckArrayFor(target).find(item => item.cardId === cardId);
     return found ? found.count : 0;
+  }
+
+  function getCombinedCardCount(cardId) {
+    return getCardCountInDeck(cardId, 'main') + getCardCountInDeck(cardId, 'side');
+  }
+
+  // ── Banlist ──────────────────────────────────────────────────────────────
+
+  function getBanlistLimit(cardId) {
+    return state.banlist[cardId];
+  }
+
+  function isCardBanlisted(cardId) {
+    return state.banlist[cardId] !== undefined;
+  }
+
+  function setBanlistLimit(cardId, limit) {
+    const card = getCardById(cardId);
+    if (!card) return { success: false, reason: 'Carta no encontrada' };
+    if (card.type === 'Token' || card.isToken) {
+      return { success: false, reason: 'Las cartas Token no pueden tener un límite de banlist.' };
+    }
+    const n = Number(limit);
+    if (!Number.isSafeInteger(n) || n < 0 || n > state.maxDeckSize) {
+      return { success: false, reason: `El límite debe ser un entero entre 0 y ${state.maxDeckSize}.` };
+    }
+    state.banlist[cardId] = n;
+    saveBanlistToLocalStorage();
+    notifyBanlistChanged();
+    return { success: true };
+  }
+
+  function clearBanlistLimit(cardId) {
+    if (state.banlist[cardId] === undefined) return;
+    delete state.banlist[cardId];
+    saveBanlistToLocalStorage();
+    notifyBanlistChanged();
   }
 
   function getMaxAllowedCopies(cardId) {
     const card = getCardById(cardId);
     if (!card) return 4;
     if (card.type === 'Token' || card.isToken) return 0;
+    const override = state.banlist[cardId];
+    if (override !== undefined) return override;
     if (card.type === 'Sello' || card.isSello || !card.rarity || card.rarity === 'None' || card.rarity === 'Sello') {
       return state.maxDeckSize;
     }
     return RARITY_LIMITS[card.rarity] || 4;
   }
 
-  function canAddCardToDeck(cardId) {
+  function canAddCardToDeck(cardId, target = 'main') {
     const card = getCardById(cardId);
     if (!card) return { allowed: false, reason: 'Carta no encontrada' };
 
@@ -490,19 +576,33 @@ function escapeHtml(value) {
       };
     }
 
-    const totalCount = getDeckTotalCount();
-    if (totalCount >= state.maxDeckSize) {
-      return { allowed: false, reason: 'El mazo principal ya tiene 40 cartas (tamaño máximo).' };
+    const sizeLimit = target === 'side' ? state.maxSideDeckSize : state.maxDeckSize;
+    const totalCount = getDeckTotalCount(target);
+    if (totalCount >= sizeLimit) {
+      return {
+        allowed: false,
+        reason: target === 'side'
+          ? `El Side Deck ya tiene ${sizeLimit} cartas (tamaño máximo).`
+          : `El mazo principal ya tiene ${sizeLimit} cartas (tamaño máximo).`
+      };
     }
 
-    const currentCount = getCardCountInDeck(cardId);
+    const combinedCount = getCombinedCardCount(cardId);
     const maxAllowed = getMaxAllowedCopies(cardId);
+    const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+    const isBanlisted = isCardBanlisted(cardId);
 
-    if (currentCount >= maxAllowed) {
-      if (card.type === 'Sello' || card.isSello || !card.rarity) {
+    if (combinedCount >= maxAllowed) {
+      if (isBanlisted) {
         return {
           allowed: false,
-          reason: 'El mazo ya alcanzó el límite de 40 cartas.'
+          reason: `Límite de Banlist alcanzado para ${card.name} (máx. ${maxAllowed} copias entre Mazo Principal y Side Deck).`
+        };
+      }
+      if (isSello) {
+        return {
+          allowed: false,
+          reason: `El mazo ya alcanzó el límite de ${state.maxDeckSize} cartas.`
         };
       }
       const rarityLabel = card.rarity === 'Legendary' ? 'Legendarias (máx. 1)' :
@@ -511,52 +611,56 @@ function escapeHtml(value) {
 
       return {
         allowed: false,
-        reason: `Límite alcanzado para cartas ${rarityLabel}`
+        reason: `Límite alcanzado para cartas ${rarityLabel} (compartido entre Mazo Principal y Side Deck)`
       };
     }
 
     return { allowed: true };
   }
 
-  function addCardToDeck(cardId) {
-    const check = canAddCardToDeck(cardId);
+  function addCardToDeck(cardId, target = 'main') {
+    const check = canAddCardToDeck(cardId, target);
     if (!check.allowed) {
       return { success: false, reason: check.reason };
     }
 
-    const existingIndex = state.deck.findIndex(item => item.cardId === cardId);
+    const deckArr = deckArrayFor(target);
+    const existingIndex = deckArr.findIndex(item => item.cardId === cardId);
     if (existingIndex !== -1) {
-      state.deck[existingIndex].count += 1;
+      deckArr[existingIndex].count += 1;
     } else {
-      state.deck.push({ cardId, count: 1 });
+      deckArr.push({ cardId, count: 1 });
     }
 
     notifyDeckChanged();
     return { success: true };
   }
 
-  function removeCardFromDeck(cardId, removeAll = false) {
-    const existingIndex = state.deck.findIndex(item => item.cardId === cardId);
+  function removeCardFromDeck(cardId, removeAll = false, target = 'main') {
+    const deckArr = deckArrayFor(target);
+    const existingIndex = deckArr.findIndex(item => item.cardId === cardId);
     if (existingIndex === -1) return;
 
-    if (removeAll || state.deck[existingIndex].count <= 1) {
-      state.deck.splice(existingIndex, 1);
+    if (removeAll || deckArr[existingIndex].count <= 1) {
+      deckArr.splice(existingIndex, 1);
     } else {
-      state.deck[existingIndex].count -= 1;
+      deckArr[existingIndex].count -= 1;
     }
 
     notifyDeckChanged();
   }
 
-  function reorderDeck(fromIndex, toIndex) {
-    if (fromIndex < 0 || fromIndex >= state.deck.length || toIndex < 0 || toIndex >= state.deck.length) return;
-    const [movedItem] = state.deck.splice(fromIndex, 1);
-    state.deck.splice(toIndex, 0, movedItem);
+  function reorderDeck(fromIndex, toIndex, target = 'main') {
+    const deckArr = deckArrayFor(target);
+    if (fromIndex < 0 || fromIndex >= deckArr.length || toIndex < 0 || toIndex >= deckArr.length) return;
+    const [movedItem] = deckArr.splice(fromIndex, 1);
+    deckArr.splice(toIndex, 0, movedItem);
     notifyDeckChanged();
   }
 
   function clearDeck() {
     state.deck = [];
+    state.sideDeck = [];
     notifyDeckChanged();
   }
 
@@ -601,10 +705,11 @@ function escapeHtml(value) {
   }
 
   function exportDeckToText() {
-    const total = getDeckTotalCount();
+    const total = getDeckTotalCount('main');
+    const sideTotal = getDeckTotalCount('side');
     const extraTokens = getActiveExtraDeckTokens();
     let text = `// Deck: ${state.deckName}\n`;
-    text += `// Main Deck (${total}/40 cartas):\n`;
+    text += `// Main Deck (${total}/${state.maxDeckSize} cartas):\n`;
 
     state.deck.forEach(item => {
       const card = getCardById(item.cardId);
@@ -613,6 +718,17 @@ function escapeHtml(value) {
         text += `${item.count}x ${escapeHtml(card.name)} ${typeStr} (${card.element.toUpperCase()})\n`;
       }
     });
+
+    if (state.sideDeck.length > 0) {
+      text += `\n// Side Deck (${sideTotal}/${state.maxSideDeckSize} cartas):\n`;
+      state.sideDeck.forEach(item => {
+        const card = getCardById(item.cardId);
+        if (card) {
+          const typeStr = card.type === 'Sello' ? '[Sello]' : `[${card.rarity || 'Sin Rareza'}]`;
+          text += `${item.count}x ${escapeHtml(card.name)} ${typeStr} (${card.element.toUpperCase()})\n`;
+        }
+      });
+    }
 
     if (extraTokens.length > 0) {
       text += `\n// Extra Deck (Tokens Automáticos):\n`;
@@ -636,6 +752,14 @@ function escapeHtml(value) {
           name: card ? card.name : 'Unknown Card',
           count: item.count
         };
+      }),
+      sideDeck: state.sideDeck.map(item => {
+        const card = getCardById(item.cardId);
+        return {
+          cardId: item.cardId,
+          name: card ? card.name : 'Unknown Card',
+          count: item.count
+        };
       })
     };
     return JSON.stringify(exportObject, null, 2);
@@ -645,23 +769,43 @@ function escapeHtml(value) {
     try {
       const data = JSON.parse(jsonString);
       if (!data || !Array.isArray(data.deck)) throw new Error('Formato JSON inválido: falta el array deck.');
-      const counts = new Map();
-      for (const item of data.deck) {
-        if (!item || !Number.isSafeInteger(item.count) || item.count <= 0) throw new Error('Cada cantidad debe ser un entero positivo.');
-        const card = getCardById(item.cardId) || (typeof item.name === 'string' && CARDS_DATA.find(c => c.name.toLowerCase() === item.name.toLowerCase()));
-        if (!card) throw new Error('Carta no encontrada: ' + (item.name || item.cardId || '(sin nombre)'));
-        if (card.isToken || card.type === 'Token') throw new Error('Los tokens no pertenecen al mazo principal.');
-        const count = (counts.get(card.id) || 0) + item.count;
-        if (count > getMaxAllowedCopies(card.id)) throw new Error('Límite de copias excedido: ' + card.name);
-        counts.set(card.id, count);
+      const sideInput = Array.isArray(data.sideDeck) ? data.sideDeck : [];
+
+      const mainCounts = new Map();
+      const sideCounts = new Map();
+      const combinedCounts = new Map();
+
+      const processList = (list, countsMap, label) => {
+        for (const item of list) {
+          if (!item || !Number.isSafeInteger(item.count) || item.count <= 0) throw new Error(`Cada cantidad de ${label} debe ser un entero positivo.`);
+          const card = getCardById(item.cardId) || (typeof item.name === 'string' && CARDS_DATA.find(c => c.name.toLowerCase() === item.name.toLowerCase()));
+          if (!card) throw new Error('Carta no encontrada: ' + (item.name || item.cardId || '(sin nombre)'));
+          if (card.isToken || card.type === 'Token') throw new Error('Los tokens no pertenecen al mazo principal ni al side deck.');
+          countsMap.set(card.id, (countsMap.get(card.id) || 0) + item.count);
+          combinedCounts.set(card.id, (combinedCounts.get(card.id) || 0) + item.count);
+        }
+      };
+
+      processList(data.deck, mainCounts, 'el mazo principal');
+      processList(sideInput, sideCounts, 'el side deck');
+
+      for (const [cardId, combined] of combinedCounts) {
+        if (combined > getMaxAllowedCopies(cardId)) {
+          const card = getCardById(cardId);
+          throw new Error('Límite de copias excedido (compartido entre Mazo Principal y Side Deck): ' + (card ? card.name : cardId));
+        }
       }
-      const total = [...counts.values()].reduce((a,b) => a+b, 0);
-      if (total > state.maxDeckSize) throw new Error('El mazo no puede superar las 40 cartas.');
+
+      const mainTotal = [...mainCounts.values()].reduce((a,b) => a+b, 0);
+      const sideTotal = [...sideCounts.values()].reduce((a,b) => a+b, 0);
+      if (mainTotal > state.maxDeckSize) throw new Error(`El mazo principal no puede superar las ${state.maxDeckSize} cartas.`);
+      if (sideTotal > state.maxSideDeckSize) throw new Error(`El side deck no puede superar las ${state.maxSideDeckSize} cartas.`);
       if (data.deckName !== undefined && typeof data.deckName !== 'string') throw new Error('Nombre de mazo inválido.');
-      state.deck = [...counts].map(([cardId,count]) => ({cardId,count}));
+      state.deck = [...mainCounts].map(([cardId,count]) => ({cardId,count}));
+      state.sideDeck = [...sideCounts].map(([cardId,count]) => ({cardId,count}));
       if (data.deckName !== undefined) state.deckName = data.deckName.trim().slice(0,32) || 'Mi Mazo de Batalla';
       notifyDeckChanged();
-      return {success:true, count:total};
+      return {success:true, count:mainTotal, sideCount:sideTotal};
     } catch (err) {
       return {success:false, error:err.message, reason:err.message};
     }
@@ -669,20 +813,23 @@ function escapeHtml(value) {
 
   function importDeckFromText(textString) {
     try {
-      const data = {deck: []};
-      let extra = false;
+      const data = {deck: [], sideDeck: []};
+      let section = 'main';
       for (const line of textString.split('\n')) {
         const value = line.trim();
         if (!value) continue;
-        if (value.startsWith('// Extra Deck')) { extra = true; continue; }
+        if (value.startsWith('// Side Deck')) { section = 'side'; continue; }
+        if (value.startsWith('// Extra Deck')) { section = 'extra'; continue; }
         if (value.startsWith('// Deck:')) data.deckName = value.slice(8).trim();
-        if (value.startsWith('//') || value.startsWith('#') || extra) continue;
+        if (value.startsWith('//') || value.startsWith('#') || section === 'extra') continue;
         const match = value.match(/^(\d+)[xX]?\s+(.+)$/);
         if (!match) throw new Error('Línea inválida: ' + value);
         const name = match[2].replace(/\s+\[[^\]]*\]\s+\([^)]*\)$/, '').trim();
-        data.deck.push({name, cardId:name, count:Number(match[1])});
+        const entry = {name, cardId:name, count:Number(match[1])};
+        if (section === 'side') data.sideDeck.push(entry);
+        else data.deck.push(entry);
       }
-      if (!data.deck.length) throw new Error('No se encontraron cartas en el texto.');
+      if (!data.deck.length && !data.sideDeck.length) throw new Error('No se encontraron cartas en el texto.');
       return importDeckFromJSON(JSON.stringify(data));
     } catch (err) {
       return {success:false, error:err.message, reason:err.message};
@@ -756,25 +903,32 @@ function escapeHtml(value) {
 
     const maxCopies = getMaxAllowedCopies(card.id);
     const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+    const banlisted = isCardBanlisted(card.id);
+    const combined = getCombinedCardCount(card.id);
 
     let inDeckBadgeHtml = '';
     if (!isDeckItem && !isHandItem) {
-      const currentInDeck = getCardCountInDeck(card.id);
-      if (currentInDeck > 0) {
-        const badgeText = isSello ? `x${currentInDeck}` : `${currentInDeck}/${maxCopies}`;
+      if (combined > 0) {
+        const badgeText = isSello && !banlisted ? `x${combined}` : `${combined}/${maxCopies}`;
         inDeckBadgeHtml = `
-          <div class="library-card-in-deck-badge ${!isSello && currentInDeck >= maxCopies ? 'is-max' : ''}" title="${currentInDeck} ${isSello ? 'copias' : `de ${maxCopies} copias`} en el mazo">
+          <div class="library-card-in-deck-badge ${!isSello && combined >= maxCopies ? 'is-max' : ''}" title="${combined} ${isSello && !banlisted ? 'copias' : `de ${maxCopies} copias`} entre Mazo Principal y Side Deck">
             ${badgeText}
           </div>
         `;
       }
     }
 
+    let banlistBadgeHtml = '';
+    if (banlisted && !isHandItem) {
+      banlistBadgeHtml = `<div class="card-banlist-badge" title="Restricción de Banlist: máximo ${maxCopies} copias entre Mazo Principal y Side Deck">🚫 ${maxCopies}</div>`;
+    }
+
     let deckQtyBadgeHtml = '';
     let deckOverlayHtml = '';
     if (isDeckItem) {
+      const atSharedMax = !isSello && combined >= maxCopies;
       deckQtyBadgeHtml = `
-        <div class="deck-card-qty-badge ${!isSello && deckCount >= maxCopies ? 'is-max' : ''}">
+        <div class="deck-card-qty-badge ${atSharedMax ? 'is-max' : ''}">
           x${deckCount}
         </div>
       `;
@@ -783,9 +937,9 @@ function escapeHtml(value) {
         <div class="deck-card-actions-overlay">
           <div class="deck-action-row">
             <button class="btn-card-ctrl btn-remove" data-action="decrement" title="Quitar 1 copia">-</button>
-            <button class="btn-card-ctrl btn-add" data-action="increment" title="Agregar otra copia" ${!isSello && deckCount >= maxCopies ? 'disabled' : ''}>+</button>
+            <button class="btn-card-ctrl btn-add" data-action="increment" title="Agregar otra copia" ${atSharedMax ? 'disabled' : ''}>+</button>
           </div>
-          <button class="btn-card-inspect" data-action="inspect" title="Ver detalles en 3D">🔍 Inspeccionar</button>
+          <button class="btn-card-inspect" data-action="inspect" title="Ver detalles en grande">🔍 Inspeccionar</button>
         </div>
       `;
     }
@@ -795,7 +949,7 @@ function escapeHtml(value) {
       : (card.artSvg || '');
 
     wrapper.innerHTML = `
-      <div class="tcg-card ${isMaxInDeck ? 'is-max-in-deck' : ''}"
+      <div class="tcg-card ${isMaxInDeck ? 'is-max-in-deck' : ''} ${banlisted ? 'is-banlisted' : ''}"
            data-element="${card.element || 'neutral'}"
            data-rarity="${card.rarity || 'none'}"
            draggable="${draggable}"
@@ -805,6 +959,7 @@ function escapeHtml(value) {
         ${cardGraphic}
         <div class="card-foil-sheen"></div>
         ${inDeckBadgeHtml}
+        ${banlistBadgeHtml}
         ${deckQtyBadgeHtml}
         ${deckOverlayHtml}
         ${isHandItem ? '<div class="mulligan-tag">DESCARTAR</div>' : ''}
@@ -852,20 +1007,27 @@ function escapeHtml(value) {
     playClick();
 
     const elementInfo = ELEMENTS[card.element] || ELEMENTS.neutral;
-    const currentInDeck = getCardCountInDeck(card.id);
+    const currentInMain = getCardCountInDeck(card.id, 'main');
+    const currentCombined = getCombinedCardCount(card.id);
     const maxCopies = getMaxAllowedCopies(card.id);
     const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+    const banlistLimit = getBanlistLimit(card.id);
+    const banlisted = banlistLimit !== undefined;
 
-    const rarityBadgeHtml = isSello
-      ? `<span class="inspector-badge" style="background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid #10b981;">🏛️ Sello (Sin Límite)</span>`
-      : `<span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: #fbbf24; border: 1px solid #fbbf24;">💎 ${escapeHtml(card.rarity)}</span>`;
+    const rarityBadgeHtml = banlisted
+      ? `<span class="inspector-badge" style="background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid #ef4444;">🚫 Banlist: máx. ${banlistLimit}</span>`
+      : (isSello
+        ? `<span class="inspector-badge" style="background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid #10b981;">🏛️ Sello (Sin Límite)</span>`
+        : `<span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: #fbbf24; border: 1px solid #fbbf24;">💎 ${escapeHtml(card.rarity)}</span>`);
 
-    const addBtnText = isSello
-      ? `<span>+</span> Agregar al Mazo (x${currentInDeck})`
-      : `<span>+</span> Agregar al Mazo (${currentInDeck}/${maxCopies})`;
+    const addBtnText = isSello && !banlisted
+      ? `<span>+</span> Agregar al Mazo (x${currentInMain})`
+      : `<span>+</span> Agregar al Mazo (${currentCombined}/${maxCopies})`;
 
     content.innerHTML = `
-      <div class="inspector-card-col" id="inspector-card-container"></div>
+      <div class="inspector-card-col" id="inspector-card-container">
+        <span class="inspector-zoom-hint">🔍 Clic en la carta para verla en pantalla completa</span>
+      </div>
       <div class="inspector-details-col">
         <div class="inspector-name">${escapeHtml(card.name)}</div>
         <div class="inspector-meta-row">
@@ -898,7 +1060,7 @@ function escapeHtml(value) {
         </div>
 
         <div class="inspector-actions">
-          <button id="btn-inspector-add" class="btn btn-primary" ${!canAddCardToDeck(card.id).allowed ? 'disabled' : ''}>
+          <button id="btn-inspector-add" class="btn btn-primary" ${!canAddCardToDeck(card.id, 'main').allowed ? 'disabled' : ''}>
             ${addBtnText}
           </button>
         </div>
@@ -906,12 +1068,22 @@ function escapeHtml(value) {
     `;
 
     const cardElem = createCardElement(card, { draggable: false });
-    content.querySelector('#inspector-card-container').appendChild(cardElem);
+    const cardContainer = content.querySelector('#inspector-card-container');
+    cardContainer.insertBefore(cardElem, cardContainer.firstChild);
+
+    const inspectFace = cardElem.querySelector('.tcg-card');
+    if (inspectFace) {
+      inspectFace.classList.add('is-zoomable');
+      inspectFace.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCardFullscreen(card);
+      });
+    }
 
     const addBtn = content.querySelector('#btn-inspector-add');
     if (addBtn) {
       addBtn.addEventListener('click', () => {
-        const result = addCardToDeck(card.id);
+        const result = addCardToDeck(card.id, 'main');
         if (result.success) {
           playCardDrop();
           openCardInspector(card.id);
@@ -931,6 +1103,14 @@ function initCardInspector() {
   modal?.addEventListener('click', event => {
     if (event.target === modal) closeCardInspector();
   });
+
+  const fsModal = document.getElementById('modal-card-fullscreen');
+  const fsClose = document.getElementById('btn-close-fullscreen-card');
+  fsClose?.addEventListener('click', closeCardFullscreen);
+  fsModal?.addEventListener('click', event => {
+    if (event.target === fsModal) closeCardFullscreen();
+  });
+
   document.addEventListener('keydown', event => {
     if (event.key === 'Tab' && modal?.classList.contains('is-open')) {
       const controls = [...modal.querySelectorAll('button:not(:disabled), [tabindex="0"]')];
@@ -938,14 +1118,39 @@ function initCardInspector() {
       if (event.shiftKey && index <= 0) { event.preventDefault(); controls.at(-1)?.focus(); }
       else if (!event.shiftKey && (index < 0 || index === controls.length-1)) { event.preventDefault(); controls[0]?.focus(); }
     }
-    if (event.key === 'Escape' && modal?.classList.contains('is-open')) {
-      event.preventDefault(); closeCardInspector();
+    if (event.key === 'Escape') {
+      if (fsModal?.classList.contains('is-open')) { event.preventDefault(); closeCardFullscreen(); return; }
+      if (modal?.classList.contains('is-open')) { event.preventDefault(); closeCardInspector(); }
     }
   });
 }
 
   function closeCardInspector() {
     const modal = document.getElementById('modal-card-inspector');
+    if (modal) { modal.classList.remove('is-open'); modal.returnFocus?.focus(); }
+  }
+
+  function openCardFullscreen(card) {
+    const modal = document.getElementById('modal-card-fullscreen');
+    const container = document.getElementById('fullscreen-card-container');
+    if (!modal || !container) return;
+
+    container.innerHTML = '';
+    const cardElem = createCardElement(card, { draggable: false });
+    const face = cardElem.querySelector('.tcg-card');
+    if (face) {
+      face.classList.add('is-fullscreen-face');
+      cardElem.addEventListener('click', () => closeCardFullscreen());
+    }
+    container.appendChild(cardElem);
+
+    if (!modal.classList.contains('is-open')) modal.returnFocus = document.activeElement;
+    modal.classList.add('is-open');
+    document.getElementById('btn-close-fullscreen-card')?.focus();
+  }
+
+  function closeCardFullscreen() {
+    const modal = document.getElementById('modal-card-fullscreen');
     if (modal) { modal.classList.remove('is-open'); modal.returnFocus?.focus(); }
   }
 
@@ -1038,8 +1243,54 @@ function initCardInspector() {
   // ==========================================================================
   // 7. DECK VIEW & COMPOSITION
   // ==========================================================================
+  function setupDeckGridInteractions(gridEl, target) {
+    if (!gridEl) return;
+
+    gridEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      const cardWrapper = e.target.closest('.tcg-card-wrapper');
+      if (!cardWrapper) return;
+
+      const cardId = cardWrapper.dataset.cardId;
+      if (!cardId) return;
+
+      if (btn) {
+        const action = btn.dataset.action;
+        if (action === 'increment') {
+          e.stopPropagation();
+          const res = addCardToDeck(cardId, target);
+          if (res.success) {
+            if (target === 'main') document.getElementById('deck-name-input').value = state.deckName;
+            playCardDrop();
+          } else {
+            showToast(res.reason, 'warning');
+          }
+        } else if (action === 'decrement') {
+          e.stopPropagation();
+          removeCardFromDeck(cardId, false, target);
+          playCardRemove();
+        } else if (action === 'inspect') {
+          e.stopPropagation();
+          openCardInspector(cardId);
+        }
+      } else {
+        openCardInspector(cardId);
+      }
+    });
+
+    gridEl.addEventListener('dblclick', (e) => {
+      const cardWrapper = e.target.closest('.tcg-card-wrapper');
+      if (cardWrapper && cardWrapper.dataset.cardId) {
+        e.stopPropagation();
+        removeCardFromDeck(cardWrapper.dataset.cardId, false, target);
+        playCardRemove();
+      }
+    });
+  }
+
   function initDeckView() {
     const deckGrid = document.getElementById('deck-grid');
+    const sideDeckGrid = document.getElementById('side-deck-grid');
     const extraDeckGrid = document.getElementById('extra-deck-grid');
     const deckNameInput = document.getElementById('deck-name-input');
 
@@ -1050,48 +1301,8 @@ function initCardInspector() {
       });
     }
 
-    if (deckGrid) {
-      deckGrid.addEventListener('click', (e) => {
-        const btn = e.target.closest('button');
-        const cardWrapper = e.target.closest('.tcg-card-wrapper');
-        if (!cardWrapper) return;
-
-        const cardId = cardWrapper.dataset.cardId;
-        if (!cardId) return;
-
-        if (btn) {
-          const action = btn.dataset.action;
-          if (action === 'increment') {
-            e.stopPropagation();
-            const res = addCardToDeck(cardId);
-            if (res.success) {
-        document.getElementById('deck-name-input').value = state.deckName;
-              playCardDrop();
-            } else {
-              showToast(res.reason, 'warning');
-            }
-          } else if (action === 'decrement') {
-            e.stopPropagation();
-            removeCardFromDeck(cardId, false);
-            playCardRemove();
-          } else if (action === 'inspect') {
-            e.stopPropagation();
-            openCardInspector(cardId);
-          }
-        } else {
-          openCardInspector(cardId);
-        }
-      });
-
-      deckGrid.addEventListener('dblclick', (e) => {
-        const cardWrapper = e.target.closest('.tcg-card-wrapper');
-        if (cardWrapper && cardWrapper.dataset.cardId) {
-          e.stopPropagation();
-          removeCardFromDeck(cardWrapper.dataset.cardId, false);
-          playCardRemove();
-        }
-      });
-    }
+    setupDeckGridInteractions(deckGrid, 'main');
+    setupDeckGridInteractions(sideDeckGrid, 'side');
 
     if (extraDeckGrid) {
       extraDeckGrid.addEventListener('click', (e) => {
@@ -1101,6 +1312,46 @@ function initCardInspector() {
         }
       });
     }
+  }
+
+  function renderDeckGrid(gridEl, deckArr, emptyStateEl) {
+    if (!gridEl) return;
+    if (deckArr.length === 0) {
+      gridEl.innerHTML = '';
+      if (emptyStateEl) emptyStateEl.style.display = 'flex';
+    } else {
+      if (emptyStateEl) emptyStateEl.style.display = 'none';
+      gridEl.innerHTML = '';
+
+      deckArr.forEach((item, index) => {
+        const card = getCardById(item.cardId);
+        if (!card) return;
+
+        const cardElem = createCardElement(card, {
+          isDeckItem: true,
+          deckCount: item.count,
+          draggable: true
+        });
+        cardElem.dataset.deckIndex = index;
+        gridEl.appendChild(cardElem);
+      });
+    }
+  }
+
+  function renderSideDeck() {
+    const sideDeckGrid = document.getElementById('side-deck-grid');
+    const sideEmptyState = document.getElementById('side-deck-empty-state');
+    const sideTotalElem = document.getElementById('side-deck-total-count');
+    const sideCountPill = document.getElementById('side-deck-count-pill');
+
+    const sideTotal = getDeckTotalCount('side');
+    if (sideTotalElem) sideTotalElem.textContent = sideTotal;
+    if (sideCountPill) {
+      sideCountPill.classList.toggle('is-over', sideTotal > state.maxSideDeckSize);
+      sideCountPill.classList.toggle('is-valid', sideTotal === state.maxSideDeckSize);
+    }
+
+    renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState);
   }
 
   function renderDeck() {
@@ -1115,7 +1366,7 @@ function initCardInspector() {
 
     if (!deckGrid) return;
 
-    const totalCount = getDeckTotalCount();
+    const totalCount = getDeckTotalCount('main');
 
     if (totalCountElem) totalCountElem.textContent = totalCount;
 
@@ -1123,40 +1374,23 @@ function initCardInspector() {
       countPill.classList.remove('is-valid', 'is-over');
       statusBadge.className = 'deck-status-badge';
 
-      if (totalCount === 40) {
+      if (totalCount === state.maxDeckSize) {
         countPill.classList.add('is-valid');
         statusBadge.classList.add('is-ready');
-        statusBadge.textContent = 'Listo (40/40)';
-      } else if (totalCount > 40) {
+        statusBadge.textContent = `Listo (${totalCount}/${state.maxDeckSize})`;
+      } else if (totalCount > state.maxDeckSize) {
         countPill.classList.add('is-over');
         statusBadge.classList.add('is-overlimit');
-        statusBadge.textContent = `Exceso (${totalCount}/40)`;
+        statusBadge.textContent = `Exceso (${totalCount}/${state.maxDeckSize})`;
       } else {
         statusBadge.classList.add('is-incomplete');
-        statusBadge.textContent = `Incompleto (${totalCount}/40)`;
+        statusBadge.textContent = `Incompleto (${totalCount}/${state.maxDeckSize})`;
       }
     }
 
-    if (state.deck.length === 0) {
-      deckGrid.innerHTML = '';
-      if (emptyState) emptyState.style.display = 'flex';
-    } else {
-      if (emptyState) emptyState.style.display = 'none';
-      deckGrid.innerHTML = '';
+    renderDeckGrid(deckGrid, state.deck, emptyState);
 
-      state.deck.forEach((item, index) => {
-        const card = getCardById(item.cardId);
-        if (!card) return;
-
-        const cardElem = createCardElement(card, {
-          isDeckItem: true,
-          deckCount: item.count,
-          draggable: true
-        });
-        cardElem.dataset.deckIndex = index;
-        deckGrid.appendChild(cardElem);
-      });
-    }
+    renderSideDeck();
 
     const activeTokens = getActiveExtraDeckTokens();
     if (extraCountElem) extraCountElem.textContent = activeTokens.length;
@@ -1354,9 +1588,9 @@ function initCardInspector() {
         const cardId = cardWrapper.dataset.cardId;
         if (!cardId) return;
 
-        const check = canAddCardToDeck(cardId);
+        const check = canAddCardToDeck(cardId, 'main');
         if (check.allowed) {
-          addCardToDeck(cardId);
+          addCardToDeck(cardId, 'main');
           playCardDrop();
           const card = CARDS_DATA.find(c => c.id === cardId);
           showToast(`Agregado: ${card ? card.name : 'Carta'} al mazo`, 'success');
@@ -1478,9 +1712,10 @@ function initCardInspector() {
     const fragment = document.createDocumentFragment();
 
       filtered.forEach(card => {
-        const currentInDeck = getCardCountInDeck(card.id);
+        const currentInDeck = getCombinedCardCount(card.id);
         const maxAllowed = getMaxAllowedCopies(card.id);
         const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+        const banlisted = isCardBanlisted(card.id);
         const isMaxInDeck = !isSello && currentInDeck >= maxAllowed;
 
         const cardElem = previous.get(card.id) || createCardElement(card, {
@@ -1490,13 +1725,20 @@ function initCardInspector() {
         });
         const face = cardElem.querySelector('.tcg-card');
       face.classList.toggle('is-max-in-deck', isMaxInDeck);
+      face.classList.toggle('is-banlisted', banlisted);
       let badge = face.querySelector('.library-card-in-deck-badge');
       if (currentInDeck > 0) {
         if (!badge) { badge = document.createElement('div'); face.appendChild(badge); }
         badge.className = 'library-card-in-deck-badge' + (isMaxInDeck ? ' is-max' : '');
-        badge.textContent = isSello ? `x${currentInDeck}` : `${currentInDeck}/${maxAllowed}`;
-        badge.title = `${currentInDeck} copias en el mazo`;
+        badge.textContent = isSello && !banlisted ? `x${currentInDeck}` : `${currentInDeck}/${maxAllowed}`;
+        badge.title = `${currentInDeck} copias entre Mazo Principal y Side Deck`;
       } else if (badge) badge.remove();
+      let banBadge = face.querySelector('.card-banlist-badge');
+      if (banlisted) {
+        if (!banBadge) { banBadge = document.createElement('div'); banBadge.className = 'card-banlist-badge'; face.appendChild(banBadge); }
+        banBadge.textContent = `🚫 ${maxAllowed}`;
+        banBadge.title = `Restricción de Banlist: máximo ${maxAllowed} copias entre Mazo Principal y Side Deck`;
+      } else if (banBadge) banBadge.remove();
       fragment.appendChild(cardElem);
       });
     libraryGrid.replaceChildren(fragment);
@@ -1508,11 +1750,73 @@ function initCardInspector() {
   // ==========================================================================
   let draggedData = null;
 
+  function parseDragPayload(e) {
+    let payload = draggedData;
+    if (!payload) {
+      try {
+        const json = e.dataTransfer.getData('application/json');
+        if (json) payload = JSON.parse(json);
+      } catch {
+        const textCardId = e.dataTransfer.getData('text/plain');
+        if (textCardId) payload = { source: 'library', cardId: textCardId, index: -1 };
+      }
+    }
+    return payload;
+  }
+
+  function setupDeckDropzone(dropzoneEl, gridSelector, target) {
+    if (!dropzoneEl) return;
+
+    dropzoneEl.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      if (draggedData) dropzoneEl.classList.add('is-drag-over');
+    });
+
+    dropzoneEl.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = draggedData && draggedData.source === 'library' ? 'copy' : 'move';
+    });
+
+    dropzoneEl.addEventListener('dragleave', (e) => {
+      if (!dropzoneEl.contains(e.relatedTarget)) {
+        dropzoneEl.classList.remove('is-drag-over');
+      }
+    });
+
+    dropzoneEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzoneEl.classList.remove('is-drag-over');
+
+      const payload = parseDragPayload(e);
+      if (!payload || !payload.cardId) return;
+
+      if (payload.source === 'library') {
+        const check = canAddCardToDeck(payload.cardId, target);
+        if (check.allowed) {
+          addCardToDeck(payload.cardId, target);
+          playCardDrop();
+          const card = getCardById(payload.cardId);
+          showToast(`Agregado: ${card ? card.name : 'Carta'} al ${target === 'side' ? 'Side Deck' : 'mazo'}`, 'success');
+        } else {
+          showToast(check.reason, 'warning');
+        }
+      } else if (payload.source === target) {
+        const targetCardWrapper = e.target.closest(`${gridSelector} .tcg-card-wrapper`);
+        if (targetCardWrapper && targetCardWrapper.dataset.deckIndex !== undefined) {
+          const targetIndex = parseInt(targetCardWrapper.dataset.deckIndex, 10);
+          if (payload.index !== -1 && targetIndex !== payload.index) {
+            reorderDeck(payload.index, targetIndex, target);
+            playCardDrop();
+          }
+        }
+      }
+    });
+  }
+
   function initDragAndDrop() {
     const deckDropzone = document.getElementById('deck-dropzone');
-    const trashDropzone = document.getElementById('trash-dropzone');
-
-    if (!deckDropzone || !trashDropzone) return;
+    const sideDeckDropzone = document.getElementById('side-deck-dropzone');
+    const libraryGrid = document.getElementById('library-grid');
 
     document.addEventListener('dragstart', (e) => {
       const cardElem = e.target.closest('.tcg-card');
@@ -1522,13 +1826,14 @@ function initCardInspector() {
       if (!wrapper) return;
 
       const cardId = wrapper.dataset.cardId;
-      const isDeckItem = wrapper.closest('.deck-grid') !== null;
-      const isLibraryItem = wrapper.closest('.library-grid') !== null;
-
       if (!cardId) return;
 
-      const source = isDeckItem ? 'deck' : (isLibraryItem ? 'library' : 'other');
-      const index = isDeckItem ? parseInt(wrapper.dataset.deckIndex, 10) : -1;
+      const isMainItem = wrapper.closest('#deck-grid') !== null;
+      const isSideItem = wrapper.closest('#side-deck-grid') !== null;
+      const isLibraryItem = wrapper.closest('#library-grid') !== null;
+
+      const source = isMainItem ? 'main' : (isSideItem ? 'side' : (isLibraryItem ? 'library' : 'other'));
+      const index = (isMainItem || isSideItem) ? parseInt(wrapper.dataset.deckIndex, 10) : -1;
 
       draggedData = { source, cardId, index };
 
@@ -1539,7 +1844,9 @@ function initCardInspector() {
       cardElem.classList.add('is-dragging');
       playCardPickup();
 
-      if (isDeckItem) trashDropzone.classList.add('is-active');
+      if ((isMainItem || isSideItem) && libraryGrid) {
+        libraryGrid.classList.add('is-remove-target');
+      }
     });
 
     document.addEventListener('dragend', (e) => {
@@ -1547,103 +1854,52 @@ function initCardInspector() {
       if (cardElem) cardElem.classList.remove('is-dragging');
 
       if (deckDropzone) deckDropzone.classList.remove('is-drag-over');
-      if (trashDropzone) {
-        trashDropzone.classList.remove('is-active');
-        trashDropzone.classList.remove('is-drag-over');
+      if (sideDeckDropzone) sideDeckDropzone.classList.remove('is-drag-over');
+      if (libraryGrid) {
+        libraryGrid.classList.remove('is-remove-target');
+        libraryGrid.classList.remove('is-drag-over');
       }
 
       draggedData = null;
     });
 
-    deckDropzone.addEventListener('dragenter', (e) => {
-      e.preventDefault();
-      if (draggedData) deckDropzone.classList.add('is-drag-over');
-    });
+    setupDeckDropzone(deckDropzone, '#deck-grid', 'main');
+    setupDeckDropzone(sideDeckDropzone, '#side-deck-grid', 'side');
 
-    deckDropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = draggedData && draggedData.source === 'library' ? 'copy' : 'move';
-    });
-
-    deckDropzone.addEventListener('dragleave', (e) => {
-      if (!deckDropzone.contains(e.relatedTarget)) {
-        deckDropzone.classList.remove('is-drag-over');
-      }
-    });
-
-    deckDropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      deckDropzone.classList.remove('is-drag-over');
-
-      let payload = draggedData;
-      if (!payload) {
-        try {
-          const json = e.dataTransfer.getData('application/json');
-          if (json) payload = JSON.parse(json);
-        } catch {
-          const textCardId = e.dataTransfer.getData('text/plain');
-          if (textCardId) payload = { source: 'library', cardId: textCardId };
+    if (libraryGrid) {
+      libraryGrid.addEventListener('dragenter', (e) => {
+        if (draggedData && (draggedData.source === 'main' || draggedData.source === 'side')) {
+          e.preventDefault();
+          libraryGrid.classList.add('is-drag-over');
         }
-      }
+      });
 
-      if (!payload || !payload.cardId) return;
+      libraryGrid.addEventListener('dragover', (e) => {
+        if (draggedData && (draggedData.source === 'main' || draggedData.source === 'side')) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+        }
+      });
 
-      if (payload.source === 'library') {
-        const check = canAddCardToDeck(payload.cardId);
-        if (check.allowed) {
-          addCardToDeck(payload.cardId);
-          playCardDrop();
+      libraryGrid.addEventListener('dragleave', (e) => {
+        if (!libraryGrid.contains(e.relatedTarget)) {
+          libraryGrid.classList.remove('is-drag-over');
+        }
+      });
+
+      libraryGrid.addEventListener('drop', (e) => {
+        const payload = parseDragPayload(e);
+        libraryGrid.classList.remove('is-drag-over');
+
+        if (payload && (payload.source === 'main' || payload.source === 'side') && payload.cardId) {
+          e.preventDefault();
+          removeCardFromDeck(payload.cardId, true, payload.source);
+          playCardRemove();
           const card = getCardById(payload.cardId);
-          showToast(`Agregado: ${card ? card.name : 'Carta'} al mazo`, 'success');
-        } else {
-          showToast(check.reason, 'warning');
+          showToast(`Removido: ${card ? card.name : 'Carta'} del ${payload.source === 'side' ? 'Side Deck' : 'mazo'}`, 'info');
         }
-      } else if (payload.source === 'deck') {
-        const targetCardWrapper = e.target.closest('.deck-grid .tcg-card-wrapper');
-        if (targetCardWrapper && targetCardWrapper.dataset.deckIndex !== undefined) {
-          const targetIndex = parseInt(targetCardWrapper.dataset.deckIndex, 10);
-          if (payload.index !== -1 && targetIndex !== payload.index) {
-            reorderDeck(payload.index, targetIndex);
-            playCardDrop();
-          }
-        }
-      }
-    });
-
-    trashDropzone.addEventListener('dragenter', (e) => {
-      e.preventDefault();
-      trashDropzone.classList.add('is-drag-over');
-    });
-
-    trashDropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-    });
-
-    trashDropzone.addEventListener('dragleave', () => {
-      trashDropzone.classList.remove('is-drag-over');
-    });
-
-    trashDropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      trashDropzone.classList.remove('is-drag-over');
-      trashDropzone.classList.remove('is-active');
-
-      let payload = draggedData;
-      if (!payload) {
-        try {
-          const json = e.dataTransfer.getData('application/json');
-          if (json) payload = JSON.parse(json);
-        } catch {}
-      }
-
-      if (payload && payload.source === 'deck' && payload.cardId) {
-        removeCardFromDeck(payload.cardId, false);
-        playCardRemove();
-        const card = getCardById(payload.cardId);
-        showToast(`Removida 1 copia de ${card ? card.name : 'Carta'}`, 'info');
-      }
-    });
+      });
+    }
   }
 
   // ==========================================================================
@@ -2097,6 +2353,143 @@ function initCardInspector() {
   }
 
   // ==========================================================================
+  // 12. BANLIST MANAGER (PERSISTENT PER-CARD COPY LIMIT OVERRIDES)
+  // ==========================================================================
+  function defaultLimitFor(card) {
+    const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+    if (isSello) return state.maxDeckSize;
+    return RARITY_LIMITS[card.rarity] || 4;
+  }
+
+  function initBanlistModal() {
+    const modal = document.getElementById('modal-banlist');
+    const openBtn = document.getElementById('btn-banlist');
+    const closeBtn = document.getElementById('btn-close-banlist');
+    const closeFooterBtn = document.getElementById('btn-close-banlist-footer');
+    const searchInput = document.getElementById('banlist-search');
+    const searchResults = document.getElementById('banlist-search-results');
+    const activeList = document.getElementById('banlist-active-list');
+    const emptyMsg = document.getElementById('banlist-empty-msg');
+
+    const closeModal = () => modal?.classList.remove('is-open');
+
+    function renderSearchResults(query) {
+      if (!searchResults) return;
+      const q = query.trim().toLowerCase();
+      if (!q) { searchResults.innerHTML = ''; return; }
+
+      const matches = CARDS_DATA
+        .filter(c => c.type !== 'Token' && !c.isToken && c.name.toLowerCase().includes(q))
+        .slice(0, 15);
+
+      if (matches.length === 0) {
+        searchResults.innerHTML = `<div class="banlist-no-results">No se encontraron cartas.</div>`;
+        return;
+      }
+
+      searchResults.innerHTML = matches.map(card => {
+        const base = defaultLimitFor(card);
+        const current = getBanlistLimit(card.id);
+        return `
+          <div class="banlist-row" data-card-id="${escapeHtml(card.id)}">
+            <span class="banlist-row-name" title="${escapeHtml(card.name)}">${escapeHtml(card.name)}</span>
+            <span class="banlist-row-default">Límite base: ${base}</span>
+            <input type="number" min="0" max="${state.maxDeckSize}" step="1" class="banlist-limit-input" value="${current !== undefined ? current : base}">
+            <button class="btn btn-secondary btn-sm" data-action="apply">Aplicar</button>
+            ${current !== undefined ? `<button class="btn btn-danger btn-sm" data-action="clear">Quitar</button>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderActiveList() {
+      if (!activeList) return;
+      const entries = Object.entries(state.banlist);
+      if (entries.length === 0) {
+        activeList.innerHTML = '';
+        if (emptyMsg) emptyMsg.style.display = 'block';
+        return;
+      }
+      if (emptyMsg) emptyMsg.style.display = 'none';
+      activeList.innerHTML = entries.map(([cardId, limit]) => {
+        const card = CARDS_DATA.find(c => c.id === cardId);
+        const name = card ? card.name : cardId;
+        return `
+          <div class="banlist-active-row" data-card-id="${escapeHtml(cardId)}">
+            <span class="banlist-row-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+            <span class="banlist-row-limit">🚫 Límite: ${limit}</span>
+            <button class="btn btn-danger btn-sm" data-action="clear">Quitar</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    if (openBtn) {
+      openBtn.addEventListener('click', () => {
+        playClick();
+        if (searchInput) searchInput.value = '';
+        renderSearchResults('');
+        renderActiveList();
+        modal?.classList.add('is-open');
+        searchInput?.focus();
+      });
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (closeFooterBtn) closeFooterBtn.addEventListener('click', closeModal);
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal?.classList.contains('is-open')) closeModal();
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => renderSearchResults(e.target.value));
+    }
+
+    function handleRowAction(container, rowSelector) {
+      container.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const row = e.target.closest(rowSelector);
+        if (!row) return;
+        const cardId = row.dataset.cardId;
+        const card = CARDS_DATA.find(c => c.id === cardId);
+        const cardName = card ? card.name : cardId;
+
+        if (btn.dataset.action === 'apply') {
+          const input = row.querySelector('.banlist-limit-input');
+          const res = setBanlistLimit(cardId, input ? input.value : NaN);
+          if (res.success) {
+            showToast(`Límite de banlist actualizado para ${cardName}`, 'success');
+          } else {
+            showToast(res.reason, 'warning');
+          }
+        } else if (btn.dataset.action === 'clear') {
+          clearBanlistLimit(cardId);
+          showToast(`Restricción eliminada para ${cardName}`, 'info');
+        }
+
+        renderSearchResults(searchInput ? searchInput.value : '');
+        renderActiveList();
+      });
+    }
+
+    if (searchResults) handleRowAction(searchResults, '.banlist-row');
+    if (activeList) handleRowAction(activeList, '.banlist-active-row');
+
+    subscribeToBanlist(() => {
+      if (modal?.classList.contains('is-open')) {
+        renderSearchResults(searchInput ? searchInput.value : '');
+        renderActiveList();
+      }
+    });
+  }
+
+  // ==========================================================================
   // INITIALIZATION ON DOM READY
   // ==========================================================================
   document.addEventListener('DOMContentLoaded', async () => {
@@ -2116,6 +2509,7 @@ function initCardInspector() {
     initClearDeckButton();
     initExportImportModal();
     initCardImporterModal();
+    initBanlistModal();
 
     // 4. Bind Subscriptions
     subscribeToDeck(() => {
@@ -2124,6 +2518,11 @@ function initCardInspector() {
     });
 
     subscribeToFilters(() => {
+      renderLibrary();
+    });
+
+    subscribeToBanlist(() => {
+      renderDeck();
       renderLibrary();
     });
 

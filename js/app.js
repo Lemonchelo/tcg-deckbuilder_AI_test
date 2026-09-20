@@ -3,7 +3,7 @@ import { escapeHtml } from './cardsData.js';
  * AETHERIUM TCG DECKBUILDER - APPLICATION BOOTSTRAP
  */
 
-import { state, loadInitialState, subscribeToDeck, subscribeToFilters, clearDeck, exportDeckToText, exportDeckToJSON, importDeckFromText, importDeckFromJSON } from './state.js';
+import { state, loadInitialState, subscribeToDeck, subscribeToFilters, subscribeToBanlist, clearDeck, exportDeckToText, exportDeckToJSON, importDeckFromText, importDeckFromJSON } from './state.js';
 import { initCardInspector } from './cardInspector.js';
 import { initDeckView, renderDeck } from './deckManager.js';
 import { initFilters, renderLibrary } from './filterManager.js';
@@ -11,6 +11,7 @@ import { initDragAndDrop } from './dragAndDrop.js';
 import { initTestHandModal } from './testHand.js';
 import { initSoundState, toggleSound, isSoundEnabled, playClick, playCardDrop, playCardRemove } from './sound.js';
 import { initIndexedDB, processImageFiles, clearCustomCardsDB } from './customCardImporter.js';
+import { initBanlistModal } from './banlistManager.js';
 
 // ==================== TOAST NOTIFICATIONS ====================
 export function showToast(message, type = 'info') {
@@ -341,6 +342,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initExportImportModal();
   initCardImportModal();
   initClearDeckButton();
+  initBanlistModal();
 
   // 4. Subscribe to reactive state
   subscribeToDeck(() => {
@@ -349,6 +351,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   subscribeToFilters(() => {
+    renderLibrary();
+  });
+
+  subscribeToBanlist(() => {
+    renderDeck();
     renderLibrary();
   });
 
