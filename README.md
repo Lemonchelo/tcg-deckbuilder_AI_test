@@ -147,8 +147,8 @@ Hay varias formas de agregar y quitar cartas:
 
 | Acción | Cómo |
 |---|---|
-| Agregar una carta | **Clic** sobre la carta en la biblioteca, o **arrastrarla** a la zona del mazo |
-| Ver detalle de una carta | **Clic derecho** en la biblioteca, o **clic** sobre la carta en el mazo |
+| Agregar una carta | **Clic derecho** sobre la carta en la biblioteca, o **arrastrarla** a la zona del mazo |
+| Ver detalle de una carta | **Clic** sobre la carta, en la biblioteca o en el mazo |
 | Sumar una copia | Botón **+** que aparece al pasar el mouse sobre una carta del mazo |
 | Quitar una copia | Botón **−** sobre la carta, **doble clic** sobre ella, o arrastrarla a la **papelera** (aparece abajo al arrastrar una carta del mazo) |
 | Reordenar | Arrastrar una carta del mazo y soltarla sobre otra |
@@ -201,7 +201,7 @@ Abre una vista ampliada de la carta con efecto 3D (se inclina al mover el mouse)
 - Descripción y texto de ambientación.
 - Botón **Agregar al Mazo** con el contador de copias actual.
 
-Se abre con clic derecho sobre una carta de la biblioteca, con clic sobre una carta del mazo o con **🔍 Inspeccionar**. Los tokens del Mazo Extra también se pueden inspeccionar.
+Se abre con clic sobre una carta de la biblioteca o del mazo, o con **🔍 Inspeccionar**. El clic en la biblioteca solo inspecciona: nunca modifica el mazo. Los tokens del Mazo Extra también se pueden inspeccionar.
 
 ---
 

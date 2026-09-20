@@ -198,7 +198,7 @@ html, body {
   display: grid;
   grid-template-columns: 1fr 490px;
   flex: 1;
-  height: calc(100vh - 60px);
+  min-height: 0;
   overflow: hidden;
   position: relative;
   z-index: 1;

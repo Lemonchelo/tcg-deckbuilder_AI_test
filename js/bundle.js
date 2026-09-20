@@ -1581,7 +1581,17 @@ function initCardInspector() {
 
     const libraryGrid = document.getElementById('library-grid');
     if (libraryGrid) {
+      // Left click only inspects the card. A card is added to the deck with a right click
+      // (or by dragging it to the deck), so a stray click never changes the deck.
       libraryGrid.addEventListener('click', (e) => {
+        const cardWrapper = e.target.closest('.tcg-card-wrapper');
+        if (cardWrapper && cardWrapper.dataset.cardId) {
+          openCardInspector(cardWrapper.dataset.cardId);
+        }
+      });
+
+      libraryGrid.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
         const cardWrapper = e.target.closest('.tcg-card-wrapper');
         if (!cardWrapper) return;
 
@@ -1596,14 +1606,6 @@ function initCardInspector() {
           showToast(`Agregado: ${card ? card.name : 'Carta'} al mazo`, 'success');
         } else {
           showToast(check.reason, 'warning');
-        }
-      });
-
-      libraryGrid.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        const cardWrapper = e.target.closest('.tcg-card-wrapper');
-        if (cardWrapper && cardWrapper.dataset.cardId) {
-          openCardInspector(cardWrapper.dataset.cardId);
         }
       });
     }

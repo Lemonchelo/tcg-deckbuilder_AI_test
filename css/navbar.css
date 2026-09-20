@@ -3,14 +3,16 @@
    ========================================================================== */
 
 .top-navbar {
-  height: 60px;
+  min-height: 60px;
   background: rgba(2, 6, 16, 0.96);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-soft);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  gap: 6px 16px;
+  padding: 6px 20px;
   z-index: 100;
   position: relative;
   box-shadow: 0 0 0 1px rgba(0,245,255,0.06), 0 4px 24px rgba(0,0,0,0.8);
@@ -92,9 +94,11 @@
 /* ── Deck Meta Info (Center) ────────────────────────────────────────────── */
 .nav-deck-info {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  flex: 1;
+  gap: 6px 12px;
+  flex: 1 1 320px;
+  min-width: 0;
   justify-content: center;
 }
 
@@ -117,7 +121,8 @@
   outline: none;
   cursor: pointer;
   transition: all var(--t-fast);
-  width: 200px;
+  width: clamp(120px, 14vw, 200px);
+  min-width: 0;
   text-transform: uppercase;
 }
 .deck-name-input:hover {
@@ -270,7 +275,50 @@
 /* ── Nav Actions ────────────────────────────────────────────────────────── */
 .nav-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  flex-shrink: 0;
+  flex: 0 1 auto;
+}
+
+/* ── Responsive navbar ──────────────────────────────────────────────────────
+   1) tighter spacing, 2) icon-only action buttons (labels stay available to
+   screen readers and as tooltips), 3) the deck info moves to its own row.
+   The navbar never clips: whatever does not fit wraps onto another row. */
+@media (max-width: 1600px) {
+  .top-navbar { padding-left: 14px; padding-right: 14px; gap: 6px 10px; }
+  .nav-deck-info { gap: 6px 8px; }
+  .nav-actions { gap: 6px; }
+  .nav-actions .btn:not(.btn-icon-only) { padding: 8px 12px; gap: 6px; }
+  .deck-count-pill, .extra-tokens-pill { padding-left: 10px; padding-right: 10px; }
+}
+
+@media (max-width: 1500px) {
+  .nav-actions .btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .nav-actions .btn:not(.btn-icon-only) {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 900px) {
+  .brand-subtitle { display: none; }
+  .nav-deck-info { order: 3; flex: 1 1 100%; }
+  .deck-name-input { width: min(260px, 60vw); }
+}
+
+@media (max-width: 480px) {
+  .brand-text { display: none; }
+  .nav-brand { gap: 0; }
+  .top-navbar { padding-left: 8px; padding-right: 8px; }
 }
