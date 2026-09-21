@@ -159,6 +159,12 @@ Cada carta del mazo muestra una insignia **x N** con la cantidad de copias, y en
 
 Si intentás agregar una carta que rompe una regla (límite de rareza alcanzado, mazo lleno, token), aparece un aviso explicando el motivo.
 
+### Tamaño de las cartas y ventana
+
+El Mazo Principal, el Side Deck y el Mazo Extra se muestran **siempre completos y a la vez**, sin scroll. Al agregar o quitar cartas, o al cambiar el tamaño de la ventana, el tamaño de las cartas se recalcula para que quepan todas: con pocas cartas son más grandes (hasta 150 px de ancho) y con muchas se achican. Los tokens se muestran un 25 % más chicos que el resto. Para que los controles sigan siendo usables, el botón 🔍 Inspeccionar solo aparece en cartas grandes; en las chicas alcanza con hacer clic sobre la carta.
+
+Si la ventana es tan chica que las cartas quedarían por debajo de 44 px de ancho (por ejemplo, un mazo completo en 1024×600), el panel pasa a tener scroll vertical como último recurso.
+
 ### Mazo Extra (Tokens)
 
 Debajo del mazo principal, el panel **⚡ Mazo Extra** se completa solo: por cada planeta presente en el mazo principal se agregan los tokens de esa facción que hayas importado. Si sacás todas las cartas de un planeta, sus tokens desaparecen. Las cartas neutrales (Arcano) no generan tokens. El contador de la barra superior muestra cuántos tokens hay activos.

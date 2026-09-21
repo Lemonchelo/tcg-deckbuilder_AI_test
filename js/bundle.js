@@ -1301,6 +1301,14 @@ function initCardInspector() {
       });
     }
 
+    // Keep every deck visible without scrolling: recompute the card size when the space changes
+    const deckArea = document.querySelector('.deck-scrollable-area');
+    if (deckArea && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(fitDeckLayout).observe(deckArea);
+    } else {
+      window.addEventListener('resize', fitDeckLayout);
+    }
+
     setupDeckGridInteractions(deckGrid, 'main');
     setupDeckGridInteractions(sideDeckGrid, 'side');
 
@@ -1415,6 +1423,81 @@ function initCardInspector() {
 
     updateDeckCompositionStats();
     renderManaCurve();
+
+    fitDeckLayout();
+  }
+
+  // ── Fit-to-window layout ─────────────────────────────────────────────────────
+  // Main, Side and Extra decks are always fully visible: instead of scrolling, the card
+  // size is recomputed from the free space and the number of cards in each deck.
+  const FIT_CARD_ASPECT = 1.4;   // card height / width (5:7 cards)
+  const FIT_MAX_CARD_W = 150;
+  const FIT_MIN_CARD_W = 44;     // below this size the area scrolls as a last resort
+  const FIT_EXTRA_SCALE = 0.75;  // tokens are automatic and shown smaller than Main/Side cards
+
+  function fitGapFor(cardW) {
+    return Math.round(Math.min(12, Math.max(4, cardW * 0.09)));
+  }
+
+  function fitDeckLayout() {
+    const area = document.querySelector('.deck-scrollable-area');
+    if (!area) return;
+
+    const areaStyle = getComputedStyle(area);
+    const availableH = area.clientHeight - parseFloat(areaStyle.paddingTop) - parseFloat(areaStyle.paddingBottom);
+    const areaGap = parseFloat(areaStyle.rowGap) || 0;
+
+    const decks = [
+      { gridId: 'deck-grid', sectionSelector: '.deck-main-section', scale: 1 },
+      { gridId: 'side-deck-grid', sectionSelector: '#side-deck-panel', scale: 1 },
+      { gridId: 'extra-deck-grid', sectionSelector: '#extra-deck-panel', scale: FIT_EXTRA_SCALE }
+    ].map(deck => {
+      const grid = document.getElementById(deck.gridId);
+      const section = area.querySelector(deck.sectionSelector);
+      if (!grid || !section) return null;
+      return {
+        grid,
+        scale: deck.scale,
+        count: grid.children.length,
+        width: grid.clientWidth,
+        // Everything in the section that is not the card grid (title, padding, borders)
+        overhead: section.offsetHeight - grid.offsetHeight
+      };
+    }).filter(Boolean);
+
+    if (decks.length === 0 || availableH <= 0) return;
+
+    const budget = availableH - areaGap * (decks.length - 1);
+
+    // Total height needed by all decks when main/side cards are `w` pixels wide
+    const neededHeight = (w) => decks.reduce((total, deck) => {
+      const cardW = Math.max(FIT_MIN_CARD_W * deck.scale, Math.floor(w * deck.scale));
+      const gap = fitGapFor(cardW);
+      const columns = Math.max(1, Math.floor((deck.width + gap) / (cardW + gap)));
+      const rows = Math.max(1, Math.ceil(deck.count / columns)); // an empty deck keeps one row as drop target
+      return total + deck.overhead + rows * Math.ceil(cardW * FIT_CARD_ASPECT) + (rows - 1) * gap;
+    }, 0);
+
+    let low = FIT_MIN_CARD_W;
+    let high = FIT_MAX_CARD_W;
+    let best = FIT_MIN_CARD_W;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (neededHeight(mid) <= budget) {
+        best = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    decks.forEach(deck => {
+      const cardW = Math.max(FIT_MIN_CARD_W * deck.scale, Math.floor(best * deck.scale));
+      deck.grid.style.setProperty('--fit-card-w', cardW + 'px');
+      deck.grid.style.setProperty('--fit-card-h', Math.ceil(cardW * FIT_CARD_ASPECT) + 'px');
+      deck.grid.style.setProperty('--fit-gap', fitGapFor(cardW) + 'px');
+      deck.grid.dataset.cardSize = cardW >= 110 ? 'lg' : (cardW >= 80 ? 'md' : (cardW >= 60 ? 'sm' : 'xs'));
+    });
   }
 
   function updateDeckCompositionStats() {

@@ -63,7 +63,31 @@ const {pathToFileURL}=require('node:url');
  await page.locator('#test-hand-cards .tcg-card-wrapper').first().click();
  assert.equal(await page.locator('#test-hand-cards .is-selected-mulligan').count(),1);
  await page.locator('#btn-close-test-hand').click();
+ // Main, Side and Extra decks stay fully visible (no scrolling) and the cards adapt to the window size
+ const allCards=await page.evaluate(()=>new Promise((resolve,reject)=>{
+   const request=indexedDB.open('AetheriumTCG_CustomCardsDB',2);
+   request.onsuccess=()=>{const db=request.result;const get=db.transaction('custom_cards').objectStore('custom_cards').getAll();get.onsuccess=()=>{resolve(get.result.map(({id,type,rarity,isToken})=>({id,type,rarity,isToken})));db.close()};get.onerror=()=>reject(get.error)};
+ }));
+ const uniq=[...new Map(allCards.filter(c=>c.type!=='Sello'&&!c.isToken&&['Common','Rare','Epic','Legendary'].includes(c.rarity)).map(c=>[c.id,c])).values()];
+ await page.locator('#btn-export-deck').click();
+ await page.locator('[data-tab="tab-json-deck"]').click();
+ await page.locator('#export-json-area').fill(JSON.stringify({deckName:'Layout',deck:[{cardId:seal.id,count:13},...uniq.slice(0,27).map(c=>({cardId:c.id,count:1}))],sideDeck:uniq.slice(27,42).map(c=>({cardId:c.id,count:1}))}));
+ await page.locator('#btn-import-apply').click();
+ assert.equal(await page.locator('#deck-total-count').textContent(),'40');
+ assert.equal(await page.locator('#side-deck-total-count').textContent(),'15');
+ const decksFit=()=>page.evaluate(()=>{const area=document.querySelector('.deck-scrollable-area');const a=area.getBoundingClientRect();
+   const cards=[...document.querySelectorAll('#deck-grid .tcg-card-wrapper,#side-deck-grid .tcg-card-wrapper,#extra-deck-grid .tcg-card-wrapper')];
+   return {noScroll:area.scrollHeight<=area.clientHeight+1,allVisible:cards.every(c=>{const r=c.getBoundingClientRect();return r.bottom<=a.bottom+1&&r.top>=a.top-1&&r.right<=a.right+1}),count:cards.length,width:document.querySelector('#deck-grid .tcg-card-wrapper').getBoundingClientRect().width};});
+ const cardWidths=[];
+ for (const [width,height] of [[1440,1000],[1280,720],[1600,1000]]) {
+   await page.setViewportSize({width,height});
+   await page.waitForFunction(()=>{const a=document.querySelector('.deck-scrollable-area');return a.scrollHeight<=a.clientHeight+1;},null,{timeout:5000});
+   const fit=await decksFit();
+   assert(fit.noScroll&&fit.allVisible&&fit.count>=43,`decks must fit without scrolling at ${width}x${height}: ${JSON.stringify(fit)}`);
+   cardWidths.push(fit.width);
+ }
+ assert(cardWidths[1]<cardWidths[0],'cards shrink in a smaller window');
  assert.deepEqual(errors,[]);
- console.log('Browser file://: 464 imports, 445 non-token cards, all 3 close methods, click inspects / right click and drag add, node reuse, duplicate prevention, reload persistence and no JS errors passed.');
+ console.log('Browser file://: 464 imports, 445 non-token cards, all 3 close methods, click inspects / right click and drag add, main/side/extra decks fit the window without scrolling, node reuse, duplicate prevention, reload persistence and no JS errors passed.');
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});
