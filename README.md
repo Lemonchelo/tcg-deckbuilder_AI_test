@@ -12,6 +12,7 @@ Constructor de mazos para un TCG con **facciones planetarias**, cartas **Sello**
 - [Análisis del mazo](#análisis-del-mazo)
 - [Inspector de cartas](#inspector-de-cartas)
 - [Probar mano (Mulligan)](#probar-mano-mulligan)
+- [Mis mazos guardados](#mis-mazos-guardados)
 - [Exportar e importar mazos](#exportar-e-importar-mazos)
 - [Dónde se guardan los datos](#dónde-se-guardan-los-datos)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -223,6 +224,27 @@ Se abre con clic sobre una carta de la biblioteca o del mazo, o con **🔍 Inspe
 
 ---
 
+## Mis mazos guardados
+
+**💾 Mis mazos** (barra superior) guarda el mazo actual —principal y side deck— en el navegador, con un nombre, y lo vuelve a cargar cuando quieras, sin pasar por exportar e importar. Exportar / Importar sigue disponible y sirve para respaldar mazos o llevarlos a otro equipo.
+
+| Acción | Cómo |
+|---|---|
+| Guardar | Escribí un nombre (hasta 32 caracteres; viene con el nombre del mazo actual) y presioná **Guardar mazo actual** o Enter. El mazo activo toma ese nombre |
+| Sobrescribir | Guardar con un nombre que ya existe (sin distinguir mayúsculas) pide confirmación |
+| Cargar | **Cargar** en la fila del mazo. Reemplaza el mazo actual y cierra el modal |
+| Eliminar | **Eliminar** en la fila del mazo, con confirmación. No afecta al mazo actual |
+
+Detalles a tener en cuenta:
+
+- Cada mazo guardado usa el mismo formato que el JSON exportado, y **cargar pasa por las mismas validaciones que importar**: límites por rareza, banlist actual, side deck de hasta 15 cartas y tamaño máximo. Si una carga falla (por ejemplo, porque cambiaste la banlist o borraste cartas de la biblioteca), se muestra el motivo y el mazo actual no cambia.
+- Las cartas se buscan por identificador y, si no se encuentra, por nombre. Los mazos guardados necesitan que esas cartas estén en la biblioteca.
+- Si cargás un mazo mientras el actual tiene cartas y no coincide con ninguno guardado, se pide confirmación antes de reemplazarlo. No se pide si el mazo actual ya está guardado.
+- No se puede guardar un mazo vacío.
+- Los mazos guardados están **en este navegador**: no se sincronizan ni se comparten. Si el almacenamiento está lleno, bloqueado o los datos guardados están dañados, la app lo informa y no sobrescribe nada.
+
+---
+
 ## Exportar e importar mazos
 
 **📥 Exportar / Importar** abre un modal con dos pestañas. Al abrirlo, ya viene cargado con el mazo actual, listo para copiar con **📋 Copiar al Portapapeles**. Para cargar un mazo, pegá el contenido en la pestaña correspondiente y presioná **⚡ Cargar este Mazo**.
@@ -283,6 +305,7 @@ Todo queda **en tu navegador**; no se envía nada a ningún servidor.
 |---|---|---|
 | Cartas importadas (con sus imágenes) | IndexedDB | base `AetheriumTCG_CustomCardsDB` |
 | Mazo activo, nombre y zoom | localStorage | `aetherium_tcg_active_deck` |
+| Mazos guardados con nombre | localStorage | `aetherium_tcg_saved_decks` |
 
 Consecuencias:
 
@@ -305,6 +328,7 @@ tcg-deckbuilder/
     ├── customCardImporter.js  # Parser de nombres de archivo + IndexedDB
     ├── cardsData.js    # Constantes de planetas y tipos
     ├── deckManager.js  # Vista del mazo y Mazo Extra
+    ├── savedDecksManager.js  # Modal "Mis mazos" (guardar, cargar, eliminar)
     ├── filterManager.js, dragAndDrop.js, manaCurve.js,
     │   cardInspector.js, testHand.js, sound.js
 ```

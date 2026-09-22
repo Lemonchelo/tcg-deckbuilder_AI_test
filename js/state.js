@@ -408,6 +408,115 @@ export function exportDeckToText() {
   return text;
 }
 
+// ── Saved decks (browser storage) ────────────────────────────────────────────
+// Named decks kept in localStorage so they can be saved and loaded without going through
+// export/import. Each entry stores the object exportDeckToJSON() produces and loading goes
+// through importDeckFromJSON(), so every load is validated and atomic (a failed load never
+// changes the current deck). Export / Import (text and JSON) keeps working independently.
+const STORAGE_KEY_SAVED_DECKS = 'aetherium_tcg_saved_decks';
+export const MAX_SAVED_DECK_NAME = 32;
+
+function readSavedDecks() {
+  let raw;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY_SAVED_DECKS);
+  } catch (err) {
+    return { error: 'No se pudo acceder al almacenamiento del navegador.' };
+  }
+  if (!raw) return { decks: [] };
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error('Formato inesperado');
+    const decks = parsed.filter(entry => entry && typeof entry.id === 'string' && typeof entry.name === 'string' &&
+      entry.data && Array.isArray(entry.data.deck));
+    return { decks };
+  } catch (err) {
+    // Never overwrite data we cannot read: the user gets a visible error instead
+    return { error: 'Los mazos guardados están dañados; no se modificaron.' };
+  }
+}
+
+function writeSavedDecks(decks) {
+  try {
+    localStorage.setItem(STORAGE_KEY_SAVED_DECKS, JSON.stringify(decks));
+    return { success: true };
+  } catch (err) {
+    return { success: false, reason: 'No se pudo guardar en el navegador (almacenamiento lleno o bloqueado).' };
+  }
+}
+
+function deckSignature(deck, sideDeck) {
+  const part = list => (Array.isArray(list) ? list : []).map(item => item.cardId + ':' + item.count).sort().join('|');
+  return part(deck) + '#' + part(sideDeck);
+}
+
+export function listSavedDecks() {
+  const result = readSavedDecks();
+  if (result.error) return { success: false, reason: result.error };
+  return { success: true, decks: [...result.decks].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0)) };
+}
+
+export function saveCurrentDeck(rawName, { overwrite = false } = {}) {
+  const name = String(rawName === undefined || rawName === null ? '' : rawName).trim().slice(0, MAX_SAVED_DECK_NAME);
+  if (!name) return { success: false, reason: 'Escribe un nombre para guardar el mazo.' };
+  if (state.deck.length === 0 && state.sideDeck.length === 0) {
+    return { success: false, reason: 'El mazo está vacío: no hay nada que guardar.' };
+  }
+
+  const current = readSavedDecks();
+  if (current.error) return { success: false, reason: current.error };
+
+  const existing = current.decks.find(entry => entry.name.toLowerCase() === name.toLowerCase());
+  if (existing && !overwrite) {
+    return { success: false, exists: true, reason: `Ya existe un mazo guardado llamado «${existing.name}».` };
+  }
+
+  const data = JSON.parse(exportDeckToJSON());
+  data.deckName = name;
+  const entry = {
+    id: existing ? existing.id : 'saved_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+    name,
+    savedAt: Date.now(),
+    data
+  };
+  const next = existing ? current.decks.map(item => (item === existing ? entry : item)) : [...current.decks, entry];
+
+  const written = writeSavedDecks(next);
+  if (!written.success) return written;
+
+  // The active deck takes the saved name so the navbar and the saved list agree
+  if (state.deckName !== name) {
+    state.deckName = name;
+    notifyDeckChanged();
+  }
+  return { success: true, overwritten: Boolean(existing), id: entry.id };
+}
+
+export function deleteSavedDeck(id) {
+  const current = readSavedDecks();
+  if (current.error) return { success: false, reason: current.error };
+  const next = current.decks.filter(entry => entry.id !== id);
+  if (next.length === current.decks.length) return { success: false, reason: 'El mazo guardado ya no existe.' };
+  return writeSavedDecks(next);
+}
+
+export function loadSavedDeck(id) {
+  const current = readSavedDecks();
+  if (current.error) return { success: false, reason: current.error };
+  const entry = current.decks.find(item => item.id === id);
+  if (!entry) return { success: false, reason: 'El mazo guardado ya no existe.' };
+  const result = importDeckFromJSON(JSON.stringify(entry.data));
+  return result.success ? { ...result, name: entry.name } : result;
+}
+
+/** True when the current deck (main + side) is identical to one of the saved decks. */
+export function isCurrentDeckSaved() {
+  const current = readSavedDecks();
+  if (current.error) return false;
+  const signature = deckSignature(state.deck, state.sideDeck);
+  return current.decks.some(entry => deckSignature(entry.data.deck, entry.data.sideDeck) === signature);
+}
+
 export function exportDeckToJSON() {
   const exportObject = {
     format: 'aetherium-tcg-v1',

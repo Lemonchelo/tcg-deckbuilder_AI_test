@@ -88,3 +88,114 @@ function checkSideDeckAndBanlist(source, label) {
 }
 checkSideDeckAndBanlist(bundle, 'Standalone bundle');
 checkSideDeckAndBanlist(['cardsData.js','state.js'].map(p=>fs.readFileSync(path.join(root,'js',p),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'')).join('\n'), 'Modules');
+
+function checkSavedDecks(source, label) {
+  const store = new Map();
+  let failWrites = false, failReads = false;
+  const storage = {
+    getItem(key) { if (failReads) throw new Error('blocked'); return store.has(key) ? store.get(key) : null; },
+    setItem(key, value) { if (failWrites) throw new Error('quota'); store.set(key, String(value)); }
+  };
+  const ctx = vm.createContext({document:{addEventListener(){}}, localStorage:storage, console});
+  const api = 'globalThis.api = { CARDS_DATA, state, importDeckFromJSON, exportDeckToJSON, getDeckTotalCount, addCardToDeck, clearDeck, setBanlistLimit, clearBanlistLimit, listSavedDecks, saveCurrentDeck, deleteSavedDeck, loadSavedDeck, isCurrentDeckSaved };';
+  vm.runInContext(source.includes('(function()') ? source.replace(/\}\)\(\);\s*$/, api+'})();') : source+'\n'+api, ctx);
+  const a = ctx.api;
+  a.CARDS_DATA.push({id:'a',name:'Alpha',rarity:'Common',type:'Criatura',element:'marte'}, {id:'b',name:'Beta',rarity:'Rare',type:'Criatura',element:'neptuno'});
+  const SAVED_KEY = 'aetherium_tcg_saved_decks';
+  const decks = () => { const r = a.listSavedDecks(); assert(r.success, r.reason); return r.decks; };
+
+  // Nothing to save, invalid names
+  assert.equal(decks().length, 0);
+  assert.equal(a.saveCurrentDeck('Vacio').success, false, 'an empty deck is not saved');
+  assert(a.importDeckFromJSON(JSON.stringify({deckName:'Original', deck:[{cardId:'a',count:2}], sideDeck:[{cardId:'b',count:1}]})).success);
+  assert.equal(a.saveCurrentDeck('').success, false);
+  assert.equal(a.saveCurrentDeck('   ').success, false);
+  assert.equal(decks().length, 0);
+
+  // Save: stores main + side, renames the active deck, appears in the list
+  const saved = a.saveCurrentDeck('Mazo A');
+  assert(saved.success && !saved.overwritten);
+  assert.equal(a.state.deckName, 'Mazo A');
+  assert.equal(decks().length, 1);
+  assert.equal(JSON.stringify(decks()[0].data.deck.map(i => [i.cardId, i.count])), '[["a",2]]');
+  assert.equal(JSON.stringify(decks()[0].data.sideDeck.map(i => [i.cardId, i.count])), '[["b",1]]');
+  assert(a.isCurrentDeckSaved());
+  const long = a.saveCurrentDeck('X'.repeat(50));
+  assert(long.success);
+  assert.equal(decks().find(d => d.id === long.id).name.length, 32, 'names are limited to 32 characters');
+  assert(a.deleteSavedDeck(long.id).success);
+
+  // Duplicate names (case-insensitive) need an explicit overwrite
+  const dup = a.saveCurrentDeck('mazo a');
+  assert.equal(dup.success, false); assert.equal(dup.exists, true);
+  assert.equal(decks().length, 1);
+  a.addCardToDeck('a', 'main');
+  assert.equal(a.isCurrentDeckSaved(), false, 'edited deck no longer matches a saved deck');
+  const over = a.saveCurrentDeck('mazo a', {overwrite:true});
+  assert(over.success && over.overwritten); assert.equal(over.id, saved.id);
+  assert.equal(decks().length, 1);
+  assert.equal(decks()[0].data.deck[0].count, 3);
+  assert(a.isCurrentDeckSaved());
+
+  // A second saved deck; the list is ordered newest first
+  a.clearDeck();
+  assert(a.importDeckFromJSON(JSON.stringify({deck:[{cardId:'b',count:3}]})).success);
+  const second = a.saveCurrentDeck('Mazo B');
+  assert(second.success);
+  assert.equal(decks().length, 2);
+
+  // Load restores main, side and name; export/import of the same deck still round-trips
+  a.clearDeck();
+  const loaded = a.loadSavedDeck(saved.id);
+  assert(loaded.success); assert.equal(loaded.name, 'mazo a');
+  assert.equal(a.getDeckTotalCount('main'), 3); assert.equal(a.getDeckTotalCount('side'), 1);
+  assert.equal(a.state.deckName, 'mazo a');
+  assert(a.importDeckFromJSON(a.exportDeckToJSON()).success);
+  assert.equal(a.getDeckTotalCount('main'), 3);
+
+  // A load that fails validation never changes the current deck
+  a.clearDeck();
+  assert(a.importDeckFromJSON(JSON.stringify({deckName:'Actual', deck:[{cardId:'b',count:1}]})).success);
+  const snapshot = JSON.stringify([a.state.deck, a.state.sideDeck, a.state.deckName]);
+  assert(a.setBanlistLimit('a', 1).success);
+  const blocked = a.loadSavedDeck(saved.id);
+  assert.equal(blocked.success, false, 'the banlist is applied when loading a saved deck');
+  assert.equal(JSON.stringify([a.state.deck, a.state.sideDeck, a.state.deckName]), snapshot);
+  a.clearBanlistLimit('a');
+  assert.equal(a.loadSavedDeck('missing-id').success, false);
+  const removedIndex = a.CARDS_DATA.findIndex(c => c.id === 'a');
+  const [removedCard] = a.CARDS_DATA.splice(removedIndex, 1);
+  assert.equal(a.loadSavedDeck(saved.id).success, false, 'saved decks with cards missing from the library are rejected');
+  assert.equal(JSON.stringify([a.state.deck, a.state.sideDeck, a.state.deckName]), snapshot);
+  a.CARDS_DATA.push(removedCard);
+
+  // Delete
+  assert(a.deleteSavedDeck(second.id).success);
+  assert.equal(a.deleteSavedDeck(second.id).success, false);
+  assert.equal(decks().length, 1);
+
+  // Storage failures are reported and never destroy or rename anything
+  failWrites = true;
+  a.addCardToDeck('b', 'main');
+  const beforeName = a.state.deckName;
+  const failedSave = a.saveCurrentDeck('Nuevo');
+  assert.equal(failedSave.success, false); assert(failedSave.reason);
+  assert.equal(a.state.deckName, beforeName, 'a failed save must not rename the deck');
+  assert.equal(a.deleteSavedDeck(saved.id).success, false);
+  failWrites = false;
+  assert.equal(decks().length, 1);
+  failReads = true;
+  assert.equal(a.listSavedDecks().success, false);
+  failReads = false;
+
+  // Corrupt saved data is reported and left untouched
+  store.set(SAVED_KEY, '{not json');
+  assert.equal(a.listSavedDecks().success, false);
+  assert.equal(a.saveCurrentDeck('Otro').success, false);
+  assert.equal(store.get(SAVED_KEY), '{not json', 'corrupt data is never overwritten');
+  assert.equal(a.loadSavedDeck(saved.id).success, false);
+  assert.equal(a.deleteSavedDeck(saved.id).success, false);
+  console.log(label + ': saved decks (save, overwrite, load, delete, atomic failures and storage errors) passed');
+}
+checkSavedDecks(bundle, 'Standalone bundle');
+checkSavedDecks(['cardsData.js','state.js'].map(p=>fs.readFileSync(path.join(root,'js',p),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'')).join('\n'), 'Modules');

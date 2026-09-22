@@ -12,6 +12,7 @@ import { initTestHandModal } from './testHand.js';
 import { initSoundState, toggleSound, isSoundEnabled, playClick, playCardDrop, playCardRemove } from './sound.js';
 import { initIndexedDB, processImageFiles, clearCustomCardsDB } from './customCardImporter.js';
 import { initBanlistModal } from './banlistManager.js';
+import { initSavedDecksModal } from './savedDecksManager.js';
 
 // ==================== TOAST NOTIFICATIONS ====================
 export function showToast(message, type = 'info') {
@@ -343,6 +344,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initCardImportModal();
   initClearDeckButton();
   initBanlistModal();
+  initSavedDecksModal();
 
   // 4. Subscribe to reactive state
   subscribeToDeck(() => {

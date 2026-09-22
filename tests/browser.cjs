@@ -87,7 +87,61 @@ const {pathToFileURL}=require('node:url');
    cardWidths.push(fit.width);
  }
  assert(cardWidths[1]<cardWidths[0],'cards shrink in a smaller window');
+ // Saved decks: save / clear / load / overwrite / delete without export or import, persisted across reloads
+ const dialogs=[];
+ page.on('dialog',async dialog=>{dialogs.push(dialog.message());await dialog.accept();});
+ const savedModalClass=()=>page.locator('#modal-saved-decks').getAttribute('class');
+ const openSaved=async()=>{await page.locator('#btn-saved-decks').click();assert.equal(await savedModalClass(),'modal-backdrop is-open');};
+ await openSaved();
+ assert.equal(await page.locator('#saved-deck-name-input').inputValue(),'Layout');
+ assert(await page.locator('#saved-decks-empty-msg').isVisible(),'no saved decks yet');
+ await page.locator('#btn-save-deck').click();
+ assert.equal(await page.locator('#saved-decks-list .saved-deck-row').count(),1);
+ const meta=await page.locator('.saved-deck-meta').first().textContent();
+ assert(meta.includes('40 cartas')&&meta.includes('Side 15'),meta);
+ await page.locator('#btn-close-saved-decks-footer').click();
+ assert.equal(await savedModalClass(),'modal-backdrop');
+ await page.locator('#btn-clear-deck').click();
+ assert.equal(await page.locator('#deck-total-count').textContent(),'0');
+ assert.equal(await page.locator('#side-deck-total-count').textContent(),'0');
+ await openSaved();
+ await page.locator('#saved-decks-list [data-action="load"]').click();
+ assert.equal(await page.locator('#deck-total-count').textContent(),'40','loading restores the main deck');
+ assert.equal(await page.locator('#side-deck-total-count').textContent(),'15','loading restores the side deck');
+ assert.equal(await page.locator('#deck-name-input').inputValue(),'Layout');
+ assert.equal(await savedModalClass(),'modal-backdrop','the modal closes after loading');
+ await page.reload({waitUntil:'domcontentloaded'});
+ await page.waitForFunction(()=>document.querySelector('#total-card-count').textContent==='445');
+ await openSaved();
+ assert.equal(await page.locator('#saved-decks-list .saved-deck-row').count(),1,'saved decks survive a reload');
+ await page.keyboard.press('Escape');
+ assert.equal(await savedModalClass(),'modal-backdrop','Escape closes the modal');
+ // Loading over an unsaved, non-empty deck asks for confirmation; saving over an existing name too
+ await page.locator('#btn-clear-deck').click();
+ await page.locator('#library-grid .tcg-card-wrapper').first().click({button:'right'});
+ assert.equal(await page.locator('#deck-total-count').textContent(),'1');
+ await openSaved();
+ await page.locator('#saved-decks-list [data-action="load"]').click();
+ assert(dialogs.some(m=>m.includes('no está guardado')),'unsaved deck replacement must be confirmed: '+dialogs.join(' | '));
+ assert.equal(await page.locator('#deck-total-count').textContent(),'40');
+ await openSaved();
+ await page.locator('#btn-save-deck').click();
+ assert(dialogs.some(m=>m.includes('sobrescribirlo')),'overwriting must be confirmed');
+ assert.equal(await page.locator('#saved-decks-list .saved-deck-row').count(),1,'overwrite keeps a single entry');
+ // Names are shown as text, never as HTML
+ await page.locator('#saved-deck-name-input').fill('<img src=x onerror=__pwn=1>');
+ await page.locator('#saved-deck-name-input').press('Enter');
+ assert.equal(await page.locator('#saved-decks-list .saved-deck-row').count(),2);
+ assert((await page.locator('#saved-decks-list').innerText()).includes('<img src=x onerror=__pwn=1>'));
+ assert.equal(await page.locator('#saved-decks-list img').count(),0);
+ assert.equal(await page.evaluate(()=>window.__pwn),undefined);
+ // Delete both
+ while (await page.locator('#saved-decks-list [data-action="delete"]').count()) await page.locator('#saved-decks-list [data-action="delete"]').first().click();
+ assert(await page.locator('#saved-decks-empty-msg').isVisible());
+ assert(dialogs.some(m=>m.includes('Eliminar')||m.includes('Esta acción')),'deleting must be confirmed');
+ await page.keyboard.press('Escape');
+ assert.equal(await page.locator('#deck-total-count').textContent(),'40','deleting a saved deck does not touch the current deck');
  assert.deepEqual(errors,[]);
- console.log('Browser file://: 464 imports, 445 non-token cards, all 3 close methods, click inspects / right click and drag add, main/side/extra decks fit the window without scrolling, node reuse, duplicate prevention, reload persistence and no JS errors passed.');
+ console.log('Browser file://: 464 imports, 445 non-token cards, all 3 close methods, click inspects / right click and drag add, main/side/extra decks fit the window without scrolling, saved decks (save/load/overwrite/delete/reload), node reuse, duplicate prevention, reload persistence and no JS errors passed.');
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});

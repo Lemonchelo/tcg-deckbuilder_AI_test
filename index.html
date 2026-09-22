@@ -74,6 +74,10 @@
           <span class="btn-icon">🎴</span>
           <span class="btn-label">Probar Mano</span>
         </button>
+        <button id="btn-saved-decks" class="btn btn-secondary" title="Guardar el mazo actual en el navegador o cargar uno guardado">
+          <span class="btn-icon">💾</span>
+          <span class="btn-label">Mis mazos</span>
+        </button>
         <button id="btn-export-deck" class="btn btn-secondary" title="Exportar o Importar Mazo">
           <span class="btn-icon">📥</span>
           <span class="btn-label">Exportar / Importar</span>
@@ -533,6 +537,41 @@
     </div>
 
     <!-- MODAL: BANLIST (PERSISTENT PER-CARD COPY LIMIT OVERRIDES) -->
+    <!-- SAVED DECKS MODAL -->
+    <div class="modal-backdrop" id="modal-saved-decks">
+      <div class="modal-dialog modal-saved-decks">
+        <div class="modal-header">
+          <div class="modal-title-with-icon">
+            <span class="modal-icon">💾</span>
+            <h2>Mis mazos guardados</h2>
+          </div>
+          <button class="modal-close-btn" id="btn-close-saved-decks" aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="saved-decks-desc">
+            Guarda el mazo actual (principal y side deck) en este navegador y cárgalo cuando quieras, sin exportar ni importar. Para llevar un mazo a otro equipo usa <strong>Exportar / Importar</strong>.
+          </p>
+          <div class="saved-deck-save-row">
+            <input type="text" id="saved-deck-name-input" class="filter-search-input" maxlength="32" placeholder="Nombre del mazo" autocomplete="off">
+            <button id="btn-save-deck" class="btn btn-primary">💾 Guardar mazo actual</button>
+          </div>
+          <p class="saved-decks-current" id="saved-decks-current-info"></p>
+
+          <div class="saved-decks-list-wrap">
+            <h3>Mazos guardados</h3>
+            <p class="saved-decks-error" id="saved-decks-error" style="display: none;"></p>
+            <div class="saved-decks-list" id="saved-decks-list">
+              <!-- Rendered dynamically by JS -->
+            </div>
+            <p class="banlist-empty" id="saved-decks-empty-msg" style="display: none;">Todavía no guardaste ningún mazo.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-close-saved-decks-footer" class="btn btn-secondary">Cerrar</button>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-backdrop" id="modal-banlist">
       <div class="modal-dialog modal-banlist">
         <div class="modal-header">
