@@ -1,14 +1,19 @@
+import { escapeHtml } from './cardsData.js';
 /**
  * AETHERIUM TCG DECKBUILDER - APPLICATION BOOTSTRAP
  */
 
-import { state, loadInitialState, subscribeToDeck, subscribeToFilters, clearDeck, exportDeckToText, exportDeckToJSON, importDeckFromText, importDeckFromJSON } from './state.js';
+import { state, loadInitialState, subscribeToDeck, subscribeToFilters, subscribeToBanlist, clearDeck, exportDeckToText, exportDeckToJSON, importDeckFromText, importDeckFromJSON } from './state.js';
+import { initCardInspector } from './cardInspector.js';
 import { initDeckView, renderDeck } from './deckManager.js';
 import { initFilters, renderLibrary } from './filterManager.js';
 import { initDragAndDrop } from './dragAndDrop.js';
 import { initTestHandModal } from './testHand.js';
 import { initSoundState, toggleSound, isSoundEnabled, playClick, playCardDrop, playCardRemove } from './sound.js';
 import { initIndexedDB, processImageFiles, clearCustomCardsDB } from './customCardImporter.js';
+import { initBanlistModal } from './banlistManager.js';
+import { initSavedDecksModal } from './savedDecksManager.js';
+import { initPoolCards, checkForPoolUpdates } from './poolManager.js';
 
 // ==================== TOAST NOTIFICATIONS ====================
 export function showToast(message, type = 'info') {
@@ -26,7 +31,7 @@ export function showToast(message, type = 'info') {
   toast.className = `toast toast-${type}`;
   toast.innerHTML = `
     <span class="toast-icon">${icons[type] || '✨'}</span>
-    <span class="toast-text">${message}</span>
+    <span class="toast-text">${escapeHtml(message)}</span>
   `;
 
   container.appendChild(toast);
@@ -61,6 +66,52 @@ function initSoundButton() {
 }
 
 // ==================== CLEAR DECK MODAL / CONFIRM ====================
+// ==================== BASE POOL UPDATES (cartas/SET-N) ====================
+function initPoolUpdatesButton() {
+  const btn = document.getElementById('btn-check-pool-updates');
+  if (!btn) return;
+
+  const defaultLabel = btn.querySelector('.btn-label')?.textContent || 'Buscar Actualizaciones';
+
+  btn.addEventListener('click', async () => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    const label = btn.querySelector('.btn-label');
+    if (label) label.textContent = 'Buscando...';
+
+    try {
+      const result = await checkForPoolUpdates((current, total) => {
+        if (label) label.textContent = `Cargando ${current}/${total}...`;
+      });
+
+      if (!result.success) {
+        if (result.cancelled) {
+          // The user closed the folder picker: not an error, nothing to report
+        } else if (result.unsupported) {
+          showToast(result.reason, 'warning');
+        } else {
+          showToast(result.reason || 'No se pudo actualizar la pool base.', 'danger');
+        }
+        return;
+      }
+
+      if (result.added === 0) {
+        showToast('La pool base ya está actualizada: no se encontraron cartas nuevas.', 'info');
+      } else {
+        const setsText = result.sets.length ? ` (${result.sets.join(', ')})` : '';
+        showToast(`Se agregaron ${result.added} carta${result.added === 1 ? '' : 's'} nueva${result.added === 1 ? '' : 's'} de la pool base${setsText}.`, 'success');
+        renderLibrary();
+        renderDeck();
+      }
+    } catch (err) {
+      showToast('No se pudo actualizar la pool base: ' + (err && err.message ? err.message : err), 'danger');
+    } finally {
+      btn.disabled = false;
+      if (label) label.textContent = defaultLabel;
+    }
+  });
+}
+
 function initClearDeckButton() {
   const btn = document.getElementById('btn-clear-deck');
   if (btn) {
@@ -163,6 +214,7 @@ function initExportImportModal() {
       }
 
       if (res.success) {
+        document.getElementById('deck-name-input').value = state.deckName;
         showToast(`¡Mazo cargado exitosamente (${res.count} cartas)!`, 'success');
         if (modal) modal.classList.remove('is-open');
       } else {
@@ -220,8 +272,12 @@ function initCardImportModal() {
     selectFilesBtn.addEventListener('click', () => filesInput.click());
   }
 
+  let importing = false;
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return;
+    if (importing) return;
+    importing = true;
+    try {
 
     if (progressBox) progressBox.style.display = 'flex';
     if (resultsSummary) resultsSummary.style.display = 'none';
@@ -230,7 +286,7 @@ function initCardImportModal() {
     const imported = await processImageFiles(files, (current, total, card) => {
       const pct = Math.round((current / total) * 100);
       if (progressFill) progressFill.style.width = `${pct}%`;
-      if (progressText) progressText.textContent = `Procesando: ${current}/${total} (${card.name})`;
+      if (progressText) progressText.textContent = `Procesando: ${current}/${total} (${escapeHtml(card.name)})`;
     });
 
     if (progressBox) progressBox.style.display = 'none';
@@ -246,8 +302,8 @@ function initCardImportModal() {
           const chip = document.createElement('div');
           chip.className = 'preview-chip';
           chip.innerHTML = `
-            <span class="preview-chip-name" title="${c.name}">${c.name}</span>
-            <span class="preview-chip-meta">${c.type} • ${c.cost}💧</span>
+            <span class="preview-chip-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+            <span class="preview-chip-meta">${escapeHtml(c.type)} • ${c.cost}💧</span>
           `;
           cardsPreview.appendChild(chip);
         });
@@ -255,8 +311,18 @@ function initCardImportModal() {
 
       renderLibrary();
     } else {
-      showToast('No se encontraron imágenes válidas en la selección.', 'warning');
+      showToast('No hay imágenes nuevas: la selección está vacía, no contiene imágenes o ya fue importada.', 'warning');
     }
+    } catch (error) {
+      showToast(error.message || 'No se pudo completar la importación.', 'danger');
+    } finally {
+      importing = false;
+      if (progressBox) progressBox.style.display = 'none';
+      document.getElementById('input-import-folder').value = '';
+      document.getElementById('input-import-files').value = '';
+      renderLibrary();
+    }
+
   };
 
   if (folderInput) {
@@ -308,8 +374,12 @@ function initCardImportModal() {
 
 // ==================== APP INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', async () => {
+  initCardInspector();
   // 1. Initialize IndexedDB for custom card persistence
   await initIndexedDB();
+
+  // 1b. Load whatever base pool (cartas/SET-N) was already scanned in a previous visit
+  await initPoolCards();
 
   // 2. Load Stored Data
   loadInitialState();
@@ -323,6 +393,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   initExportImportModal();
   initCardImportModal();
   initClearDeckButton();
+  initBanlistModal();
+  initSavedDecksModal();
+  initPoolUpdatesButton();
 
   // 4. Subscribe to reactive state
   subscribeToDeck(() => {
@@ -331,6 +404,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   subscribeToFilters(() => {
+    renderLibrary();
+  });
+
+  subscribeToBanlist(() => {
+    renderDeck();
     renderLibrary();
   });
 

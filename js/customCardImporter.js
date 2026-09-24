@@ -17,12 +17,20 @@ let dbInstance = null;
 export function initIndexedDB() {
   return new Promise((resolve) => {
     try {
-      const request = indexedDB.open(DB_NAME, 2);
+      const request = indexedDB.open(DB_NAME, 3);
 
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        }
+        // Added in v3 for the base card pool (poolManager.js); kept separate from
+        // custom_cards so "Borrar Cartas Personalizadas" never touches it.
+        if (!db.objectStoreNames.contains('pool_cards')) {
+          db.createObjectStore('pool_cards', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('app_config')) {
+          db.createObjectStore('app_config', { keyPath: 'key' });
         }
       };
 
@@ -39,17 +47,12 @@ export function initIndexedDB() {
 }
 
 export function saveCustomCardToDB(card) {
-  if (!dbInstance) return Promise.resolve();
-  return new Promise((resolve) => {
-    try {
-      const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
-      store.put(card);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve();
-    } catch (e) {
-      resolve();
-    }
+  if (!dbInstance) return Promise.reject(new Error('No está disponible el almacenamiento de cartas en este navegador.'));
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(card);
+    tx.oncomplete = () => resolve();
+    tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo guardar la carta. Revisá el espacio disponible.'));
   });
 }
 
@@ -253,31 +256,28 @@ export function parseCardFilename(filename, dataUrl) {
 }
 
 export async function processImageFiles(files, onProgress) {
-  const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-  const importedCards = [];
-
-  for (let i = 0; i < imageFiles.length; i++) {
-    const file = imageFiles[i];
+  const images = Array.from(files).filter(f => f.type.startsWith('image/'));
+  const imported = [];
+  for (let i = 0; i < images.length; i++) {
+    const file = images[i];
     const dataUrl = await readFileAsDataURL(file);
     const card = parseCardFilename(file.name, dataUrl);
-
-    await saveCustomCardToDB(card);
-    CARDS_DATA.push(card);
-    importedCards.push(card);
-
-    if (onProgress) {
-      onProgress(i + 1, imageFiles.length, card);
+    const exists = CARDS_DATA.some(c => c.name === card.name && c.type === card.type && c.element === card.element && c.imageUrl === dataUrl);
+    if (!exists) {
+      await saveCustomCardToDB(card);
+      CARDS_DATA.push(card);
+      imported.push(card);
     }
+    if (onProgress) onProgress(i + 1, images.length, card);
   }
-
-  return importedCards;
+  return imported;
 }
 
 function readFileAsDataURL(file) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => resolve(e.target.result);
-    reader.onerror = () => resolve('');
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reader.onabort = () => reject(new Error('No se pudo leer: ' + file.name));
     reader.readAsDataURL(file);
   });
 }

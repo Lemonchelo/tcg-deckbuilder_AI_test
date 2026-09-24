@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aetherium TCG Deckbuilder Studio</title>
+  <title>STG TCG Deckbuilder</title>
   <meta name="description" content="Creador de mazos para TCG con Facciones Planetarias, Sellos, Mazo Extra de Tokens automático y Drag and Drop.">
   
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   
   <!-- CSS Stylesheets -->
   <link rel="stylesheet" href="css/main.css">
@@ -29,8 +29,8 @@
           <div class="gem-inner"></div>
         </div>
         <div class="brand-text">
-          <h1 class="brand-title">AETHERIUM</h1>
-          <span class="brand-subtitle">Planetary Deckbuilder Studio</span>
+          <h1 class="brand-title">STG TCG</h1>
+          <span class="brand-subtitle">Deckbuilder</span>
         </div>
       </div>
 
@@ -39,18 +39,6 @@
         <div class="deck-name-container">
           <input type="text" id="deck-name-input" class="deck-name-input" value="Mazo Planetario de Batalla" title="Haz clic para renombrar el mazo" maxlength="32">
           <span class="edit-icon">✎</span>
-        </div>
-        <!-- Main Deck 40-Card Counter -->
-        <div class="deck-count-pill" id="deck-count-pill" title="El mazo principal debe contener exactamente 40 cartas">
-          <span class="count-label">Mazo:</span>
-          <span class="count-value" id="deck-total-count">0</span>
-          <span class="count-target">/ 40</span>
-        </div>
-        <!-- Extra Deck (Token) Counter -->
-        <div class="extra-tokens-pill" id="extra-tokens-pill" title="Tokens generados automáticamente según las facciones activas en tu mazo">
-          <span class="count-label">Mazo Extra:</span>
-          <span class="extra-token-val" id="extra-tokens-count">0</span>
-          <span class="extra-token-badge">Tokens</span>
         </div>
         <!-- Status Badge -->
         <div class="deck-status-badge is-incomplete" id="deck-status-badge">
@@ -64,13 +52,25 @@
           <span class="btn-icon">📁</span>
           <span class="btn-label">Importar Cartas</span>
         </button>
+        <button id="btn-check-pool-updates" class="btn btn-secondary" title="Cargar o actualizar la pool base (cartas/SET-N) desde la carpeta del proyecto">
+          <span class="btn-icon">🔄</span>
+          <span class="btn-label">Buscar Actualizaciones</span>
+        </button>
         <button id="btn-test-hand" class="btn btn-secondary" title="Simular mano inicial y robos">
           <span class="btn-icon">🎴</span>
           <span class="btn-label">Probar Mano</span>
         </button>
+        <button id="btn-saved-decks" class="btn btn-secondary" title="Guardar el mazo actual en el navegador o cargar uno guardado">
+          <span class="btn-icon">💾</span>
+          <span class="btn-label">Mis mazos</span>
+        </button>
         <button id="btn-export-deck" class="btn btn-secondary" title="Exportar o Importar Mazo">
           <span class="btn-icon">📥</span>
           <span class="btn-label">Exportar / Importar</span>
+        </button>
+        <button id="btn-banlist" class="btn btn-secondary" title="Gestionar límites de copias por carta (Banlist)">
+          <span class="btn-icon">🚫</span>
+          <span class="btn-label">Banlist</span>
         </button>
         <button id="btn-clear-deck" class="btn btn-danger" title="Vaciar todas las cartas del mazo">
           <span class="btn-icon">🗑️</span>
@@ -129,7 +129,15 @@
           <div class="deck-main-section">
             <div class="deck-sub-header">
               <span class="sub-title">🎴 Mazo Principal (40 cartas)</span>
-              <span class="sub-tip">Límites: 4 Comunes, 3 Raras, 2 Épicas, 1 Legendaria</span>
+              <div class="deck-sub-header-right">
+                <span class="sub-tip">Límites: 4 Comunes, 3 Raras, 2 Épicas, 1 Legendaria</span>
+                <!-- Main Deck 40-Card Counter -->
+                <div class="deck-count-pill" id="deck-count-pill" title="El mazo principal debe contener exactamente 40 cartas">
+                  <span class="count-label">Mazo:</span>
+                  <span class="count-value" id="deck-total-count">0</span>
+                  <span class="count-target">/ 40</span>
+                </div>
+              </div>
             </div>
 
             <div class="deck-dropzone-container" id="deck-dropzone">
@@ -145,7 +153,7 @@
               <div class="deck-empty-state" id="deck-empty-state">
                 <div class="empty-icon-shield">🎴</div>
                 <h3>Tu mazo está vacío</h3>
-                <p>Arrastra cartas desde la biblioteca o haz clic en ellas para agregarlas (hasta 40 cartas).</p>
+                <p>Arrastra cartas desde la biblioteca o haz clic derecho sobre ellas para agregarlas (hasta 40 cartas).</p>
                 <div class="empty-quick-tip">
                   <span>💡 Recuerda agregar cartas <strong>Sello</strong> para proveer de recursos a tus invocaciones.</span>
                 </div>
@@ -158,6 +166,44 @@
             </div>
           </div>
 
+          <!-- SIDE DECK (15 CARDS, SHARES COPY LIMITS WITH MAIN DECK) -->
+          <div class="side-deck-section" id="side-deck-panel">
+            <div class="deck-sub-header">
+              <span class="sub-title">🗂️ Side Deck (15 cartas)</span>
+              <div class="deck-sub-header-right">
+                <span class="sub-tip">Comparte el límite de copias con el Mazo Principal</span>
+                <!-- Side Deck Counter -->
+                <div class="deck-count-pill side-deck-count-pill" id="side-deck-count-pill" title="El Side Deck admite hasta 15 cartas y comparte el límite de copias con el Mazo Principal">
+                  <span class="count-label">Side:</span>
+                  <span class="count-value" id="side-deck-total-count">0</span>
+                  <span class="count-target">/ 15</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="deck-dropzone-container side-deck-dropzone-container" id="side-deck-dropzone">
+              <div class="deck-drop-highlight" id="side-deck-drop-highlight">
+                <div class="drop-pulse-border"></div>
+                <div class="drop-message">
+                  <span class="drop-icon">✨</span>
+                  <span>¡Suelta la carta aquí para agregarla al Side Deck!</span>
+                </div>
+              </div>
+
+              <!-- Empty State -->
+              <div class="deck-empty-state side-deck-empty-state" id="side-deck-empty-state">
+                <div class="empty-icon-shield">🗂️</div>
+                <h3>Tu Side Deck está vacío</h3>
+                <p>Arrastra cartas desde la biblioteca hasta acá (hasta 15 cartas). El límite de copias por carta se comparte con el Mazo Principal.</p>
+              </div>
+
+              <!-- Active Cards Grid in Side Deck -->
+              <div class="deck-grid" id="side-deck-grid">
+                <!-- Rendered via JS -->
+              </div>
+            </div>
+          </div>
+
           <!-- AUTOMATED EXTRA DECK (TOKENS) -->
           <div class="extra-deck-section" id="extra-deck-panel">
             <div class="extra-deck-header">
@@ -165,7 +211,15 @@
                 <span class="extra-deck-title">⚡ Mazo Extra (Tokens)</span>
                 <span class="extra-auto-badge">Automático</span>
               </div>
-              <span class="extra-deck-desc">Se agregan y remueven automáticamente según las facciones presentes en tu mazo principal.</span>
+              <div class="extra-deck-header-right">
+                <span class="extra-deck-desc">Se agregan y remueven automáticamente según las facciones presentes en tu mazo principal.</span>
+                <!-- Extra Deck (Token) Counter -->
+                <div class="extra-tokens-pill" id="extra-tokens-pill" title="Tokens generados automáticamente según las facciones activas en tu mazo">
+                  <span class="count-label">Mazo Extra:</span>
+                  <span class="extra-token-val" id="extra-tokens-count">0</span>
+                  <span class="extra-token-badge">Tokens</span>
+                </div>
+              </div>
             </div>
 
             <div class="extra-deck-body">
@@ -179,12 +233,6 @@
           </div>
 
         </div>
-
-        <!-- Bottom Trash Dropzone for Drag-to-Remove -->
-        <div class="trash-dropzone" id="trash-dropzone">
-          <span class="trash-icon">🗑️</span>
-          <span class="trash-text">Arrastra aquí para remover del mazo principal</span>
-        </div>
       </section>
 
       <!-- RIGHT SECTION: CARD LIBRARY SLIDER & FILTERS -->
@@ -193,7 +241,7 @@
         <!-- Sidebar Header with Card Count -->
         <div class="library-header">
           <div class="library-title-row">
-            <h2 class="section-title">Biblioteca de Cartas</h2>
+            <h2 class="section-title" title="Clic: ver detalle · Clic derecho o arrastrar: agregar al mazo">Biblioteca de Cartas</h2>
             <div class="library-count-badge" id="library-count-badge">
               Mostrando <span id="filtered-card-count">0</span> / <span id="total-card-count">0</span>
             </div>
@@ -318,9 +366,13 @@
         </div>
 
         <!-- SCROLLABLE LIBRARY CARD GRID -->
-        <div class="library-scroll-area" id="library-scroll-container">
+        <div class="library-scroll-area" id="library-scroll-container" title="Arrastra una carta del mazo o del side deck hasta acá para quitarla">
           <div class="library-grid" id="library-grid">
             <!-- Rendered dynamically by JS -->
+          </div>
+          <div class="library-remove-hint" id="library-remove-hint">
+            <span class="drop-icon">🗑️</span>
+            <span>Soltá la carta acá para quitarla del mazo</span>
           </div>
 
           <!-- Empty Results State -->
@@ -407,10 +459,20 @@
 
     <!-- MODAL: CARD INSPECTOR (3D HD VIEW) -->
     <div class="modal-backdrop" id="modal-card-inspector">
-      <div class="modal-dialog modal-inspector">
-        <button class="modal-close-btn" id="btn-close-inspector">&times;</button>
+      <div class="modal-dialog modal-inspector" role="dialog" aria-modal="true" aria-label="Detalle de carta">
+        <button class="modal-close-btn" id="btn-close-inspector" type="button" aria-label="Cerrar detalle">&times;</button>
         <div class="inspector-content" id="inspector-content">
           <!-- Populated dynamically by JS with 3D card and lore -->
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: CARD FULLSCREEN ZOOM (reached by clicking the card inside the inspector) -->
+    <div class="modal-backdrop" id="modal-card-fullscreen">
+      <div class="modal-dialog modal-fullscreen-card" role="dialog" aria-modal="true" aria-label="Carta en pantalla completa">
+        <button class="modal-close-btn" id="btn-close-fullscreen-card" type="button" aria-label="Cerrar vista completa">&times;</button>
+        <div class="fullscreen-card-container" id="fullscreen-card-container">
+          <!-- Populated dynamically by JS -->
         </div>
       </div>
     </div>
@@ -480,6 +542,76 @@
           <button id="btn-import-apply" class="btn btn-primary">
             <span>⚡</span> Cargar este Mazo
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: BANLIST (PERSISTENT PER-CARD COPY LIMIT OVERRIDES) -->
+    <!-- SAVED DECKS MODAL -->
+    <div class="modal-backdrop" id="modal-saved-decks">
+      <div class="modal-dialog modal-saved-decks">
+        <div class="modal-header">
+          <div class="modal-title-with-icon">
+            <span class="modal-icon">💾</span>
+            <h2>Mis mazos guardados</h2>
+          </div>
+          <button class="modal-close-btn" id="btn-close-saved-decks" aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="saved-decks-desc">
+            Guarda el mazo actual (principal y side deck) en este navegador y cárgalo cuando quieras, sin exportar ni importar. Para llevar un mazo a otro equipo usa <strong>Exportar / Importar</strong>.
+          </p>
+          <div class="saved-deck-save-row">
+            <input type="text" id="saved-deck-name-input" class="filter-search-input" maxlength="32" placeholder="Nombre del mazo" autocomplete="off">
+            <button id="btn-save-deck" class="btn btn-primary">💾 Guardar mazo actual</button>
+          </div>
+          <p class="saved-decks-current" id="saved-decks-current-info"></p>
+
+          <div class="saved-decks-list-wrap">
+            <h3>Mazos guardados</h3>
+            <p class="saved-decks-error" id="saved-decks-error" style="display: none;"></p>
+            <div class="saved-decks-list" id="saved-decks-list">
+              <!-- Rendered dynamically by JS -->
+            </div>
+            <p class="banlist-empty" id="saved-decks-empty-msg" style="display: none;">Todavía no guardaste ningún mazo.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-close-saved-decks-footer" class="btn btn-secondary">Cerrar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="modal-banlist">
+      <div class="modal-dialog modal-banlist">
+        <div class="modal-header">
+          <div class="modal-title-with-icon">
+            <span class="modal-icon">🚫</span>
+            <h2>Lista de Restricciones (Banlist)</h2>
+          </div>
+          <button class="modal-close-btn" id="btn-close-banlist">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="banlist-desc">
+            Definí un límite de copias propio para una carta, distinto del límite por rareza (por ejemplo, 8 u 1 copia en vez de 4). El límite queda guardado de forma permanente y se comparte entre el Mazo Principal y el Side Deck.
+          </p>
+          <div class="banlist-search-row">
+            <input type="text" id="banlist-search" class="filter-search-input" placeholder="Buscar carta para restringir...">
+          </div>
+          <div class="banlist-results" id="banlist-search-results">
+            <!-- Rendered dynamically by JS -->
+          </div>
+
+          <div class="banlist-active-list-wrap">
+            <h3>Restricciones activas</h3>
+            <div class="banlist-active-list" id="banlist-active-list">
+              <!-- Rendered dynamically by JS -->
+            </div>
+            <p class="banlist-empty" id="banlist-empty-msg" style="display: none;">No hay restricciones definidas todavía.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-close-banlist-footer" class="btn btn-secondary">Cerrar</button>
         </div>
       </div>
     </div>

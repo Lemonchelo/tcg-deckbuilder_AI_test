@@ -4,7 +4,6 @@
    ========================================================================== */
 
 /* ── Google Fonts (tech-grade) ─────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
 
 :root {
   /* ── Core Backgrounds ──────────────────────────────────────────────── */
@@ -199,7 +198,7 @@ html, body {
   display: grid;
   grid-template-columns: 1fr 490px;
   flex: 1;
-  height: calc(100vh - 60px);
+  min-height: 0;
   overflow: hidden;
   position: relative;
   z-index: 1;
@@ -453,4 +452,12 @@ html, body {
   clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
   border: 1px solid;
   background: rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }

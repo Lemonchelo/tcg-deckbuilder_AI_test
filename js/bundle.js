@@ -2,7 +2,7 @@
  * AETHERIUM TCG DECKBUILDER STUDIO - STANDALONE BUNDLE
  * Zero-dependency standalone application bundle.
  * Fully supports direct local execution via file:/// double-click on Windows.
- * 
+ *
  * Rules:
  * - 40 Cards Main Deck
  * - Dynamic Rarity Limits: Common (4), Rare (3), Epic (2), Legendary (1)
@@ -14,6 +14,10 @@
 
 (function() {
   'use strict';
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
+}
+
 
   // ==========================================================================
   // 1. CARDS DATA & CONSTANTS
@@ -70,7 +74,7 @@
 
       <!-- Top Header Banner -->
       <rect x="12" y="14" width="226" height="34" rx="6" fill="rgba(8,12,24,0.85)" stroke="${accentColor || '#38bdf8'}" stroke-width="1.5"/>
-      
+
       <!-- Cost / Sello Icon -->
       <circle cx="30" cy="31" r="15" fill="url(#gem_${name.replace(/\s+/g, '')})" stroke="#ffffff" stroke-width="2" filter="url(#glow_${name.replace(/\s+/g, '')})"/>
       <text x="30" y="36" font-family="'JetBrains Mono', monospace" font-size="${isSello ? '11' : '14'}" font-weight="900" fill="#ffffff" text-anchor="middle">${isSello ? '💎' : cost}</text>
@@ -84,7 +88,7 @@
       <!-- Central Art Window -->
       <rect x="16" y="54" width="218" height="155" rx="8" fill="#060913" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
       <circle cx="125" cy="130" r="50" fill="${accentColor || '#38bdf8'}" opacity="0.25" filter="url(#glow_${name.replace(/\s+/g, '')})"/>
-      
+
       ${isSello ? `
         <circle cx="125" cy="130" r="40" fill="none" stroke="${accentColor || '#38bdf8'}" stroke-width="4" stroke-dasharray="8 4"/>
         <polygon points="125,95 155,145 95,145" fill="${accentColor || '#38bdf8'}" opacity="0.8"/>
@@ -135,11 +139,17 @@
   function initIndexedDB() {
     return new Promise((resolve) => {
       try {
-        const request = indexedDB.open(DB_NAME, 2);
+        const request = indexedDB.open(DB_NAME, 3);
         request.onupgradeneeded = (e) => {
           const db = e.target.result;
           if (!db.objectStoreNames.contains(STORE_NAME)) {
             db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains('pool_cards')) {
+            db.createObjectStore('pool_cards', { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains('app_config')) {
+            db.createObjectStore('app_config', { keyPath: 'key' });
           }
         };
         request.onsuccess = (e) => {
@@ -154,17 +164,12 @@
   }
 
   function saveCustomCardToDB(card) {
-    if (!dbInstance) return Promise.resolve();
-    return new Promise((resolve) => {
-      try {
-        const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        store.put(card);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => resolve();
-      } catch (e) {
-        resolve();
-      }
+    if (!dbInstance) return Promise.reject(new Error('No está disponible el almacenamiento de cartas en este navegador.'));
+    return new Promise((resolve, reject) => {
+      const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(card);
+      tx.oncomplete = () => resolve();
+      tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo guardar la carta. Revisá el espacio disponible.'));
     });
   }
 
@@ -352,31 +357,28 @@
   }
 
   async function processImageFiles(files, onProgress) {
-    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-    const importedCards = [];
-
-    for (let i = 0; i < imageFiles.length; i++) {
-      const file = imageFiles[i];
+    const images = Array.from(files).filter(f => f.type.startsWith('image/'));
+    const imported = [];
+    for (let i = 0; i < images.length; i++) {
+      const file = images[i];
       const dataUrl = await readFileAsDataURL(file);
       const card = parseCardFilename(file.name, dataUrl);
-
-      await saveCustomCardToDB(card);
-      CARDS_DATA.push(card);
-      importedCards.push(card);
-
-      if (onProgress) {
-        onProgress(i + 1, imageFiles.length, card);
+      const exists = CARDS_DATA.some(c => c.name === card.name && c.type === card.type && c.element === card.element && c.imageUrl === dataUrl);
+      if (!exists) {
+        await saveCustomCardToDB(card);
+        CARDS_DATA.push(card);
+        imported.push(card);
       }
+      if (onProgress) onProgress(i + 1, images.length, card);
     }
-
-    return importedCards;
+    return imported;
   }
 
   function readFileAsDataURL(file) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = () => resolve('');
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reader.onabort = () => reject(new Error('No se pudo leer: ' + file.name));
       reader.readAsDataURL(file);
     });
   }
@@ -385,6 +387,7 @@
   // 3. REACTIVE STATE & DECK RULES
   // ==========================================================================
   const STORAGE_KEY = 'aetherium_tcg_active_deck';
+  const STORAGE_KEY_BANLIST = 'aetherium_tcg_banlist';
 
   const RARITY_LIMITS = {
     Common: 4,
@@ -395,8 +398,11 @@
 
   const state = {
     deckName: 'Mi Mazo de Batalla',
-    deck: [],
+    deck: [], // Main Deck
+    sideDeck: [], // Side Deck (shares copy limits with Main Deck)
     maxDeckSize: 40,
+    maxSideDeckSize: 15,
+    banlist: {}, // { [cardId]: customCopyLimit } — persists independently of the active deck
     filters: {
       search: '',
       element: 'all',
@@ -408,9 +414,14 @@
     }
   };
 
+  function deckArrayFor(target) {
+    return target === 'side' ? state.sideDeck : state.deck;
+  }
+
   const listeners = {
     deck: [],
-    filters: []
+    filters: [],
+    banlist: []
   };
 
   function subscribeToDeck(callback) {
@@ -419,6 +430,10 @@
 
   function subscribeToFilters(callback) {
     listeners.filters.push(callback);
+  }
+
+  function subscribeToBanlist(callback) {
+    listeners.banlist.push(callback);
   }
 
   function notifyDeckChanged() {
@@ -430,137 +445,271 @@
     listeners.filters.forEach(cb => cb(state.filters, state));
   }
 
+  function notifyBanlistChanged() {
+    listeners.banlist.forEach(cb => cb(state.banlist, state));
+  }
+
   function saveToLocalStorage() {
     try {
       const dataToSave = {
         deckName: state.deckName,
         deck: state.deck,
+        sideDeck: state.sideDeck,
         cardScale: state.filters.cardScale
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (err) {}
   }
 
+  function saveBanlistToLocalStorage() {
+    try {
+      localStorage.setItem(STORAGE_KEY_BANLIST, JSON.stringify(state.banlist));
+    } catch (err) {}
+  }
+
+  function loadBanlistFromLocalStorage() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_BANLIST);
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object') {
+        Object.entries(parsed).forEach(([cardId, limit]) => {
+          if (Number.isSafeInteger(limit) && limit >= 0 && limit <= state.maxDeckSize) {
+            state.banlist[cardId] = limit;
+          }
+        });
+      }
+    } catch (err) {}
+  }
+
+  function isValidDeckItem(item) {
+    const card = item && getCardById(item.cardId);
+    return !!(item && Number.isSafeInteger(item.count) && item.count > 0 && card && card.type !== 'Token' && !card.isToken);
+  }
+
   function loadInitialState() {
+    loadBanlistFromLocalStorage();
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.deckName) state.deckName = parsed.deckName;
         if (Array.isArray(parsed.deck)) {
-          state.deck = parsed.deck.filter(item => {
-            const card = getCardById(item.cardId);
-            return card && card.type !== 'Token' && !card.isToken;
-          });
+          state.deck = parsed.deck.filter(isValidDeckItem);
+        }
+        if (Array.isArray(parsed.sideDeck)) {
+          state.sideDeck = parsed.sideDeck.filter(isValidDeckItem);
         }
         if (parsed.cardScale) {
           state.filters.cardScale = Math.max(0.75, Math.min(1.35, parsed.cardScale));
         }
       } else {
         state.deck = [];
+        state.sideDeck = [];
       }
     } catch (err) {
       state.deck = [];
+      state.sideDeck = [];
     }
   }
 
-  function getDeckTotalCount() {
-    return state.deck.reduce((sum, item) => sum + item.count, 0);
+  function getDeckTotalCount(target = 'main') {
+    return deckArrayFor(target).reduce((sum, item) => sum + item.count, 0);
   }
 
-  function getCardCountInDeck(cardId) {
-    const found = state.deck.find(item => item.cardId === cardId);
+  function getCardCountInDeck(cardId, target = 'main') {
+    const found = deckArrayFor(target).find(item => item.cardId === cardId);
     return found ? found.count : 0;
+  }
+
+  function getCombinedCardCount(cardId) {
+    return getCardCountInDeck(cardId, 'main') + getCardCountInDeck(cardId, 'side');
+  }
+
+  // ── Banlist ──────────────────────────────────────────────────────────────
+
+  function getBanlistLimit(cardId) {
+    return state.banlist[cardId];
+  }
+
+  function isCardBanlisted(cardId) {
+    return state.banlist[cardId] !== undefined;
+  }
+
+  function setBanlistLimit(cardId, limit) {
+    const card = getCardById(cardId);
+    if (!card) return { success: false, reason: 'Carta no encontrada' };
+    if (card.type === 'Token' || card.isToken) {
+      return { success: false, reason: 'Las cartas Token no pueden tener un límite de banlist.' };
+    }
+    const n = Number(limit);
+    if (!Number.isSafeInteger(n) || n < 0 || n > state.maxDeckSize) {
+      return { success: false, reason: `El límite debe ser un entero entre 0 y ${state.maxDeckSize}.` };
+    }
+    state.banlist[cardId] = n;
+    saveBanlistToLocalStorage();
+    notifyBanlistChanged();
+    return { success: true };
+  }
+
+  function clearBanlistLimit(cardId) {
+    if (state.banlist[cardId] === undefined) return;
+    delete state.banlist[cardId];
+    saveBanlistToLocalStorage();
+    notifyBanlistChanged();
   }
 
   function getMaxAllowedCopies(cardId) {
     const card = getCardById(cardId);
     if (!card) return 4;
     if (card.type === 'Token' || card.isToken) return 0;
+    const override = state.banlist[cardId];
+    if (override !== undefined) return override;
     if (card.type === 'Sello' || card.isSello || !card.rarity || card.rarity === 'None' || card.rarity === 'Sello') {
       return state.maxDeckSize;
     }
     return RARITY_LIMITS[card.rarity] || 4;
   }
 
-  function canAddCardToDeck(cardId) {
+  function canAddCardToDeck(cardId, target = 'main') {
     const card = getCardById(cardId);
     if (!card) return { allowed: false, reason: 'Carta no encontrada' };
 
     if (card.type === 'Token' || card.isToken) {
-      return { 
-        allowed: false, 
-        reason: 'Las cartas Token pertenecen al Mazo Extra y se agregan automáticamente según las facciones del mazo.' 
+      return {
+        allowed: false,
+        reason: 'Las cartas Token pertenecen al Mazo Extra y se agregan automáticamente según las facciones del mazo.'
       };
     }
 
-    const totalCount = getDeckTotalCount();
-    if (totalCount >= state.maxDeckSize) {
-      return { allowed: false, reason: 'El mazo principal ya tiene 40 cartas (tamaño máximo).' };
+    const sizeLimit = target === 'side' ? state.maxSideDeckSize : state.maxDeckSize;
+    const totalCount = getDeckTotalCount(target);
+    if (totalCount >= sizeLimit) {
+      return {
+        allowed: false,
+        reason: target === 'side'
+          ? `El Side Deck ya tiene ${sizeLimit} cartas (tamaño máximo).`
+          : `El mazo principal ya tiene ${sizeLimit} cartas (tamaño máximo).`
+      };
     }
 
-    const currentCount = getCardCountInDeck(cardId);
+    const combinedCount = getCombinedCardCount(cardId);
     const maxAllowed = getMaxAllowedCopies(cardId);
+    const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+    const isBanlisted = isCardBanlisted(cardId);
 
-    if (currentCount >= maxAllowed) {
-      if (card.type === 'Sello' || card.isSello || !card.rarity) {
-        return { 
-          allowed: false, 
-          reason: 'El mazo ya alcanzó el límite de 40 cartas.' 
+    if (combinedCount >= maxAllowed) {
+      if (isBanlisted) {
+        return {
+          allowed: false,
+          reason: `Límite de Banlist alcanzado para ${card.name} (máx. ${maxAllowed} copias entre Mazo Principal y Side Deck).`
+        };
+      }
+      if (isSello) {
+        return {
+          allowed: false,
+          reason: `El mazo ya alcanzó el límite de ${state.maxDeckSize} cartas.`
         };
       }
       const rarityLabel = card.rarity === 'Legendary' ? 'Legendarias (máx. 1)' :
         card.rarity === 'Epic' ? 'Épicas (máx. 2)' :
         card.rarity === 'Rare' ? 'Raras (máx. 3)' : 'Comunes (máx. 4)';
 
-      return { 
-        allowed: false, 
-        reason: `Límite alcanzado para cartas ${rarityLabel}` 
+      return {
+        allowed: false,
+        reason: `Límite alcanzado para cartas ${rarityLabel} (compartido entre Mazo Principal y Side Deck)`
       };
     }
 
     return { allowed: true };
   }
 
-  function addCardToDeck(cardId) {
-    const check = canAddCardToDeck(cardId);
+  function addCardToDeck(cardId, target = 'main') {
+    const check = canAddCardToDeck(cardId, target);
     if (!check.allowed) {
       return { success: false, reason: check.reason };
     }
 
-    const existingIndex = state.deck.findIndex(item => item.cardId === cardId);
+    const deckArr = deckArrayFor(target);
+    const existingIndex = deckArr.findIndex(item => item.cardId === cardId);
     if (existingIndex !== -1) {
-      state.deck[existingIndex].count += 1;
+      deckArr[existingIndex].count += 1;
     } else {
-      state.deck.push({ cardId, count: 1 });
+      deckArr.push({ cardId, count: 1 });
     }
 
     notifyDeckChanged();
     return { success: true };
   }
 
-  function removeCardFromDeck(cardId, removeAll = false) {
-    const existingIndex = state.deck.findIndex(item => item.cardId === cardId);
+  function removeCardFromDeck(cardId, removeAll = false, target = 'main') {
+    const deckArr = deckArrayFor(target);
+    const existingIndex = deckArr.findIndex(item => item.cardId === cardId);
     if (existingIndex === -1) return;
 
-    if (removeAll || state.deck[existingIndex].count <= 1) {
-      state.deck.splice(existingIndex, 1);
+    if (removeAll || deckArr[existingIndex].count <= 1) {
+      deckArr.splice(existingIndex, 1);
     } else {
-      state.deck[existingIndex].count -= 1;
+      deckArr[existingIndex].count -= 1;
     }
 
     notifyDeckChanged();
   }
 
-  function reorderDeck(fromIndex, toIndex) {
-    if (fromIndex < 0 || fromIndex >= state.deck.length || toIndex < 0 || toIndex >= state.deck.length) return;
-    const [movedItem] = state.deck.splice(fromIndex, 1);
-    state.deck.splice(toIndex, 0, movedItem);
+  // Moves a single copy of a card from one deck to the other (Main <-> Side),
+  // one copy at a time for comfort when adjusting the split. The combined copy
+  // count across Main + Side stays the same, so the per-card rarity/banlist
+  // limit is never affected by a move — only the destination deck's own size
+  // limit (40 for Main, 15 for Side) can block it.
+  function moveCardBetweenDecks(cardId, fromTarget) {
+    const toTarget = fromTarget === 'side' ? 'main' : 'side';
+    const fromArr = deckArrayFor(fromTarget);
+    const fromIndex = fromArr.findIndex(item => item.cardId === cardId);
+    if (fromIndex === -1) {
+      return { success: false, reason: 'Esa carta no está en ese mazo.' };
+    }
+
+    const toArr = deckArrayFor(toTarget);
+    const toSizeLimit = toTarget === 'side' ? state.maxSideDeckSize : state.maxDeckSize;
+    const toCurrentTotal = getDeckTotalCount(toTarget);
+
+    if (toCurrentTotal + 1 > toSizeLimit) {
+      return {
+        success: false,
+        reason: toTarget === 'side'
+          ? `El Side Deck ya tiene ${toSizeLimit} cartas (tamaño máximo).`
+          : `El Mazo Principal ya tiene ${toSizeLimit} cartas (tamaño máximo).`
+      };
+    }
+
+    if (fromArr[fromIndex].count <= 1) {
+      fromArr.splice(fromIndex, 1);
+    } else {
+      fromArr[fromIndex].count -= 1;
+    }
+
+    const toExistingIndex = toArr.findIndex(item => item.cardId === cardId);
+    if (toExistingIndex !== -1) {
+      toArr[toExistingIndex].count += 1;
+    } else {
+      toArr.push({ cardId, count: 1 });
+    }
+
+    notifyDeckChanged();
+    return { success: true, moved: 1, to: toTarget };
+  }
+
+  function reorderDeck(fromIndex, toIndex, target = 'main') {
+    const deckArr = deckArrayFor(target);
+    if (fromIndex < 0 || fromIndex >= deckArr.length || toIndex < 0 || toIndex >= deckArr.length) return;
+    const [movedItem] = deckArr.splice(fromIndex, 1);
+    deckArr.splice(toIndex, 0, movedItem);
     notifyDeckChanged();
   }
 
   function clearDeck() {
     state.deck = [];
+    state.sideDeck = [];
     notifyDeckChanged();
   }
 
@@ -605,18 +754,30 @@
   }
 
   function exportDeckToText() {
-    const total = getDeckTotalCount();
+    const total = getDeckTotalCount('main');
+    const sideTotal = getDeckTotalCount('side');
     const extraTokens = getActiveExtraDeckTokens();
     let text = `// Deck: ${state.deckName}\n`;
-    text += `// Main Deck (${total}/40 cartas):\n`;
+    text += `// Main Deck (${total}/${state.maxDeckSize} cartas):\n`;
 
     state.deck.forEach(item => {
       const card = getCardById(item.cardId);
       if (card) {
         const typeStr = card.type === 'Sello' ? '[Sello]' : `[${card.rarity || 'Sin Rareza'}]`;
-        text += `${item.count}x ${card.name} ${typeStr} (${card.element.toUpperCase()})\n`;
+        text += `${item.count}x ${escapeHtml(card.name)} ${typeStr} (${card.element.toUpperCase()})\n`;
       }
     });
+
+    if (state.sideDeck.length > 0) {
+      text += `\n// Side Deck (${sideTotal}/${state.maxSideDeckSize} cartas):\n`;
+      state.sideDeck.forEach(item => {
+        const card = getCardById(item.cardId);
+        if (card) {
+          const typeStr = card.type === 'Sello' ? '[Sello]' : `[${card.rarity || 'Sin Rareza'}]`;
+          text += `${item.count}x ${escapeHtml(card.name)} ${typeStr} (${card.element.toUpperCase()})\n`;
+        }
+      });
+    }
 
     if (extraTokens.length > 0) {
       text += `\n// Extra Deck (Tokens Automáticos):\n`;
@@ -626,6 +787,115 @@
     }
 
     return text;
+  }
+
+  // ── Saved decks (browser storage) ────────────────────────────────────────────
+  // Named decks kept in localStorage so they can be saved and loaded without going through
+  // export/import. Each entry stores the object exportDeckToJSON() produces and loading goes
+  // through importDeckFromJSON(), so every load is validated and atomic (a failed load never
+  // changes the current deck). Export / Import (text and JSON) keeps working independently.
+  const STORAGE_KEY_SAVED_DECKS = 'aetherium_tcg_saved_decks';
+  const MAX_SAVED_DECK_NAME = 32;
+
+  function readSavedDecks() {
+    let raw;
+    try {
+      raw = localStorage.getItem(STORAGE_KEY_SAVED_DECKS);
+    } catch (err) {
+      return { error: 'No se pudo acceder al almacenamiento del navegador.' };
+    }
+    if (!raw) return { decks: [] };
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error('Formato inesperado');
+      const decks = parsed.filter(entry => entry && typeof entry.id === 'string' && typeof entry.name === 'string' &&
+        entry.data && Array.isArray(entry.data.deck));
+      return { decks };
+    } catch (err) {
+      // Never overwrite data we cannot read: the user gets a visible error instead
+      return { error: 'Los mazos guardados están dañados; no se modificaron.' };
+    }
+  }
+
+  function writeSavedDecks(decks) {
+    try {
+      localStorage.setItem(STORAGE_KEY_SAVED_DECKS, JSON.stringify(decks));
+      return { success: true };
+    } catch (err) {
+      return { success: false, reason: 'No se pudo guardar en el navegador (almacenamiento lleno o bloqueado).' };
+    }
+  }
+
+  function deckSignature(deck, sideDeck) {
+    const part = list => (Array.isArray(list) ? list : []).map(item => item.cardId + ':' + item.count).sort().join('|');
+    return part(deck) + '#' + part(sideDeck);
+  }
+
+  function listSavedDecks() {
+    const result = readSavedDecks();
+    if (result.error) return { success: false, reason: result.error };
+    return { success: true, decks: [...result.decks].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0)) };
+  }
+
+  function saveCurrentDeck(rawName, { overwrite = false } = {}) {
+    const name = String(rawName === undefined || rawName === null ? '' : rawName).trim().slice(0, MAX_SAVED_DECK_NAME);
+    if (!name) return { success: false, reason: 'Escribe un nombre para guardar el mazo.' };
+    if (state.deck.length === 0 && state.sideDeck.length === 0) {
+      return { success: false, reason: 'El mazo está vacío: no hay nada que guardar.' };
+    }
+
+    const current = readSavedDecks();
+    if (current.error) return { success: false, reason: current.error };
+
+    const existing = current.decks.find(entry => entry.name.toLowerCase() === name.toLowerCase());
+    if (existing && !overwrite) {
+      return { success: false, exists: true, reason: `Ya existe un mazo guardado llamado «${existing.name}».` };
+    }
+
+    const data = JSON.parse(exportDeckToJSON());
+    data.deckName = name;
+    const entry = {
+      id: existing ? existing.id : 'saved_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+      name,
+      savedAt: Date.now(),
+      data
+    };
+    const next = existing ? current.decks.map(item => (item === existing ? entry : item)) : [...current.decks, entry];
+
+    const written = writeSavedDecks(next);
+    if (!written.success) return written;
+
+    // The active deck takes the saved name so the navbar and the saved list agree
+    if (state.deckName !== name) {
+      state.deckName = name;
+      notifyDeckChanged();
+    }
+    return { success: true, overwritten: Boolean(existing), id: entry.id };
+  }
+
+  function deleteSavedDeck(id) {
+    const current = readSavedDecks();
+    if (current.error) return { success: false, reason: current.error };
+    const next = current.decks.filter(entry => entry.id !== id);
+    if (next.length === current.decks.length) return { success: false, reason: 'El mazo guardado ya no existe.' };
+    return writeSavedDecks(next);
+  }
+
+  function loadSavedDeck(id) {
+    const current = readSavedDecks();
+    if (current.error) return { success: false, reason: current.error };
+    const entry = current.decks.find(item => item.id === id);
+    if (!entry) return { success: false, reason: 'El mazo guardado ya no existe.' };
+    const result = importDeckFromJSON(JSON.stringify(entry.data));
+    return result.success ? { ...result, name: entry.name } : result;
+  }
+
+  /** True when the current deck (main + side) is identical to one of the saved decks. */
+  function isCurrentDeckSaved() {
+    const current = readSavedDecks();
+    if (current.error) return false;
+    const signature = deckSignature(state.deck, state.sideDeck);
+    return current.decks.some(entry => deckSignature(entry.data.deck, entry.data.sideDeck) === signature);
   }
 
   function exportDeckToJSON() {
@@ -640,6 +910,14 @@
           name: card ? card.name : 'Unknown Card',
           count: item.count
         };
+      }),
+      sideDeck: state.sideDeck.map(item => {
+        const card = getCardById(item.cardId);
+        return {
+          cardId: item.cardId,
+          name: card ? card.name : 'Unknown Card',
+          count: item.count
+        };
       })
     };
     return JSON.stringify(exportObject, null, 2);
@@ -648,72 +926,71 @@
   function importDeckFromJSON(jsonString) {
     try {
       const data = JSON.parse(jsonString);
-      if (!data.deck || !Array.isArray(data.deck)) {
-        throw new Error('Formato JSON inválido. Debe contener un array "deck".');
+      if (!data || !Array.isArray(data.deck)) throw new Error('Formato JSON inválido: falta el array deck.');
+      const sideInput = Array.isArray(data.sideDeck) ? data.sideDeck : [];
+
+      const mainCounts = new Map();
+      const sideCounts = new Map();
+      const combinedCounts = new Map();
+
+      const processList = (list, countsMap, label) => {
+        for (const item of list) {
+          if (!item || !Number.isSafeInteger(item.count) || item.count <= 0) throw new Error(`Cada cantidad de ${label} debe ser un entero positivo.`);
+          const card = getCardById(item.cardId) || (typeof item.name === 'string' && CARDS_DATA.find(c => c.name.toLowerCase() === item.name.toLowerCase()));
+          if (!card) throw new Error('Carta no encontrada: ' + (item.name || item.cardId || '(sin nombre)'));
+          if (card.isToken || card.type === 'Token') throw new Error('Los tokens no pertenecen al mazo principal ni al side deck.');
+          countsMap.set(card.id, (countsMap.get(card.id) || 0) + item.count);
+          combinedCounts.set(card.id, (combinedCounts.get(card.id) || 0) + item.count);
+        }
+      };
+
+      processList(data.deck, mainCounts, 'el mazo principal');
+      processList(sideInput, sideCounts, 'el side deck');
+
+      for (const [cardId, combined] of combinedCounts) {
+        if (combined > getMaxAllowedCopies(cardId)) {
+          const card = getCardById(cardId);
+          throw new Error('Límite de copias excedido (compartido entre Mazo Principal y Side Deck): ' + (card ? card.name : cardId));
+        }
       }
 
-      const newDeck = [];
-      let importedCount = 0;
-
-      data.deck.forEach(item => {
-        let card = getCardById(item.cardId);
-        if (!card && item.name) {
-          card = CARDS_DATA.find(c => c.name.toLowerCase() === item.name.toLowerCase());
-        }
-
-        if (card && card.type !== 'Token' && !card.isToken) {
-          const maxAllowed = getMaxAllowedCopies(card.id);
-          const count = Math.min(Math.max(1, parseInt(item.count, 10) || 1), maxAllowed);
-          newDeck.push({ cardId: card.id, count });
-          importedCount += count;
-        }
-      });
-
-      if (data.deckName) state.deckName = data.deckName;
-      state.deck = newDeck;
+      const mainTotal = [...mainCounts.values()].reduce((a,b) => a+b, 0);
+      const sideTotal = [...sideCounts.values()].reduce((a,b) => a+b, 0);
+      if (mainTotal > state.maxDeckSize) throw new Error(`El mazo principal no puede superar las ${state.maxDeckSize} cartas.`);
+      if (sideTotal > state.maxSideDeckSize) throw new Error(`El side deck no puede superar las ${state.maxSideDeckSize} cartas.`);
+      if (data.deckName !== undefined && typeof data.deckName !== 'string') throw new Error('Nombre de mazo inválido.');
+      state.deck = [...mainCounts].map(([cardId,count]) => ({cardId,count}));
+      state.sideDeck = [...sideCounts].map(([cardId,count]) => ({cardId,count}));
+      if (data.deckName !== undefined) state.deckName = data.deckName.trim().slice(0,32) || 'Mi Mazo de Batalla';
       notifyDeckChanged();
-      return { success: true, count: importedCount };
+      return {success:true, count:mainTotal, sideCount:sideTotal};
     } catch (err) {
-      return { success: false, error: err.message };
+      return {success:false, error:err.message, reason:err.message};
     }
   }
 
   function importDeckFromText(textString) {
     try {
-      const lines = textString.split('\n');
-      const newDeck = [];
-      let importedCount = 0;
-
-      lines.forEach(line => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) {
-          if (trimmed.startsWith('// Deck:')) {
-            state.deckName = trimmed.replace('// Deck:', '').trim();
-          }
-          return;
-        }
-
-        const match = trimmed.match(/^(\d+)[xX]?\s+(.+)$/);
-        if (match) {
-          const qty = parseInt(match[1], 10);
-          let rawName = match[2].trim();
-          rawName = rawName.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim();
-
-          const card = CARDS_DATA.find(c => c.name.toLowerCase() === rawName.toLowerCase() || c.id === rawName);
-          if (card && card.type !== 'Token' && !card.isToken) {
-            const maxAllowed = getMaxAllowedCopies(card.id);
-            const count = Math.min(qty, maxAllowed);
-            newDeck.push({ cardId: card.id, count });
-            importedCount += count;
-          }
-        }
-      });
-
-      state.deck = newDeck;
-      notifyDeckChanged();
-      return { success: true, count: importedCount };
+      const data = {deck: [], sideDeck: []};
+      let section = 'main';
+      for (const line of textString.split('\n')) {
+        const value = line.trim();
+        if (!value) continue;
+        if (value.startsWith('// Side Deck')) { section = 'side'; continue; }
+        if (value.startsWith('// Extra Deck')) { section = 'extra'; continue; }
+        if (value.startsWith('// Deck:')) data.deckName = value.slice(8).trim();
+        if (value.startsWith('//') || value.startsWith('#') || section === 'extra') continue;
+        const match = value.match(/^(\d+)[xX]?\s+(.+)$/);
+        if (!match) throw new Error('Línea inválida: ' + value);
+        const name = match[2].replace(/\s+\[[^\]]*\]\s+\([^)]*\)$/, '').trim();
+        const entry = {name, cardId:name, count:Number(match[1])};
+        if (section === 'side') data.sideDeck.push(entry);
+        else data.deck.push(entry);
+      }
+      if (!data.deck.length && !data.sideDeck.length) throw new Error('No se encontraron cartas en el texto.');
+      return importDeckFromJSON(JSON.stringify(data));
     } catch (err) {
-      return { success: false, error: err.message };
+      return {success:false, error:err.message, reason:err.message};
     }
   }
 
@@ -784,57 +1061,53 @@
 
     const maxCopies = getMaxAllowedCopies(card.id);
     const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+    const banlisted = isCardBanlisted(card.id);
+    const combined = getCombinedCardCount(card.id);
 
     let inDeckBadgeHtml = '';
     if (!isDeckItem && !isHandItem) {
-      const currentInDeck = getCardCountInDeck(card.id);
-      if (currentInDeck > 0) {
-        const badgeText = isSello ? `x${currentInDeck}` : `${currentInDeck}/${maxCopies}`;
+      if (combined > 0) {
+        const badgeText = isSello && !banlisted ? `x${combined}` : `${combined}/${maxCopies}`;
         inDeckBadgeHtml = `
-          <div class="library-card-in-deck-badge ${!isSello && currentInDeck >= maxCopies ? 'is-max' : ''}" title="${currentInDeck} ${isSello ? 'copias' : `de ${maxCopies} copias`} en el mazo">
+          <div class="library-card-in-deck-badge ${!isSello && combined >= maxCopies ? 'is-max' : ''}" title="${combined} ${isSello && !banlisted ? 'copias' : `de ${maxCopies} copias`} entre Mazo Principal y Side Deck">
             ${badgeText}
           </div>
         `;
       }
     }
 
-    let deckQtyBadgeHtml = '';
-    let deckOverlayHtml = '';
-    if (isDeckItem) {
-      deckQtyBadgeHtml = `
-        <div class="deck-card-qty-badge ${!isSello && deckCount >= maxCopies ? 'is-max' : ''}">
-          x${deckCount}
-        </div>
-      `;
+    let banlistBadgeHtml = '';
+    if (banlisted && !isHandItem) {
+      banlistBadgeHtml = `<div class="card-banlist-badge" title="Restricción de Banlist: máximo ${maxCopies} copias entre Mazo Principal y Side Deck">🚫 ${maxCopies}</div>`;
+    }
 
-      deckOverlayHtml = `
-        <div class="deck-card-actions-overlay">
-          <div class="deck-action-row">
-            <button class="btn-card-ctrl btn-remove" data-action="decrement" title="Quitar 1 copia">-</button>
-            <button class="btn-card-ctrl btn-add" data-action="increment" title="Agregar otra copia" ${!isSello && deckCount >= maxCopies ? 'disabled' : ''}>+</button>
-          </div>
-          <button class="btn-card-inspect" data-action="inspect" title="Ver detalles en 3D">🔍 Inspeccionar</button>
+    let deckQtyBadgeHtml = '';
+    if (isDeckItem) {
+      const atSharedMax = !isSello && combined >= maxCopies;
+      deckQtyBadgeHtml = `
+        <div class="deck-card-qty-badge ${atSharedMax ? 'is-max' : ''}">
+          x${deckCount}
         </div>
       `;
     }
 
-    const cardGraphic = card.imageUrl 
-      ? `<img src="${card.imageUrl}" alt="${card.name}" class="full-card-image" loading="lazy">` 
+    const cardGraphic = card.imageUrl
+      ? `<img src="${escapeHtml(card.imageUrl)}" alt="${escapeHtml(card.name)}" class="full-card-image" loading="lazy">`
       : (card.artSvg || '');
 
     wrapper.innerHTML = `
-      <div class="tcg-card ${isMaxInDeck ? 'is-max-in-deck' : ''}" 
-           data-element="${card.element || 'neutral'}" 
+      <div class="tcg-card ${isMaxInDeck ? 'is-max-in-deck' : ''} ${banlisted ? 'is-banlisted' : ''}"
+           data-element="${card.element || 'neutral'}"
            data-rarity="${card.rarity || 'none'}"
            draggable="${draggable}"
            tabindex="0"
            role="button"
-           aria-label="${card.name}, ${card.element}, Coste ${card.cost}">
+           aria-label="${escapeHtml(card.name)}, ${escapeHtml(card.element)}, Coste ${card.cost}">
         ${cardGraphic}
         <div class="card-foil-sheen"></div>
         ${inDeckBadgeHtml}
+        ${banlistBadgeHtml}
         ${deckQtyBadgeHtml}
-        ${deckOverlayHtml}
         ${isHandItem ? '<div class="mulligan-tag">DESCARTAR</div>' : ''}
       </div>
     `;
@@ -846,34 +1119,27 @@
   function attach3DTiltEffect(wrapper) {
     const card = wrapper.querySelector('.tcg-card');
     if (!card) return;
-
-    let bounds;
-
-    function onMouseEnter() { bounds = card.getBoundingClientRect(); }
-    function onMouseMove(e) {
-      if (!bounds) bounds = card.getBoundingClientRect();
-      const mouseX = e.clientX - bounds.left;
-      const mouseY = e.clientY - bounds.top;
-      const leftX = mouseX - bounds.width / 2;
-      const topY = mouseY - bounds.height / 2;
-      const rx = -(topY / (bounds.height / 2)) * 14;
-      const ry = (leftX / (bounds.width / 2)) * 14;
-      const foilX = (mouseX / bounds.width) * 100;
-      const foilY = (mouseY / bounds.height) * 100;
-
-      card.style.transform = `perspective(1000px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateY(-4px)`;
-      card.style.setProperty('--foil-x', `${foilX.toFixed(1)}%`);
-      card.style.setProperty('--foil-y', `${foilY.toFixed(1)}%`);
-    }
-
-    function onMouseLeave() {
+    let frame = 0, latest;
+    const reset = () => {
+      cancelAnimationFrame(frame); frame = 0;
       card.style.transform = '';
-      bounds = null;
-    }
-
-    wrapper.addEventListener('mouseenter', onMouseEnter);
-    wrapper.addEventListener('mousemove', onMouseMove);
-    wrapper.addEventListener('mouseleave', onMouseLeave);
+    };
+    wrapper.addEventListener('mousemove', e => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      latest = e;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const bounds = wrapper.getBoundingClientRect();
+        const x = (latest.clientX - bounds.left) / bounds.width;
+        const y = (latest.clientY - bounds.top) / bounds.height;
+        card.style.transform = `perspective(1000px) rotateX(${(0.5-y)*16}deg) rotateY(${(x-0.5)*16}deg) translateY(-3px)`;
+        card.style.setProperty('--foil-x', `${x*100}%`);
+        card.style.setProperty('--foil-y', `${y*100}%`);
+      });
+    });
+    wrapper.addEventListener('mouseleave', reset);
+    wrapper.addEventListener('dragstart', reset);
   }
 
   function openCardInspector(cardId) {
@@ -887,28 +1153,35 @@
     playClick();
 
     const elementInfo = ELEMENTS[card.element] || ELEMENTS.neutral;
-    const currentInDeck = getCardCountInDeck(card.id);
+    const currentInMain = getCardCountInDeck(card.id, 'main');
+    const currentCombined = getCombinedCardCount(card.id);
     const maxCopies = getMaxAllowedCopies(card.id);
     const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+    const banlistLimit = getBanlistLimit(card.id);
+    const banlisted = banlistLimit !== undefined;
 
-    const rarityBadgeHtml = isSello
-      ? `<span class="inspector-badge" style="background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid #10b981;">🏛️ Sello (Sin Límite)</span>`
-      : `<span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: #fbbf24; border: 1px solid #fbbf24;">💎 ${card.rarity}</span>`;
+    const rarityBadgeHtml = banlisted
+      ? `<span class="inspector-badge" style="background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid #ef4444;">🚫 Banlist: máx. ${banlistLimit}</span>`
+      : (isSello
+        ? `<span class="inspector-badge" style="background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid #10b981;">🏛️ Sello (Sin Límite)</span>`
+        : `<span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: #fbbf24; border: 1px solid #fbbf24;">💎 ${escapeHtml(card.rarity)}</span>`);
 
-    const addBtnText = isSello
-      ? `<span>+</span> Agregar al Mazo (x${currentInDeck})`
-      : `<span>+</span> Agregar al Mazo (${currentInDeck}/${maxCopies})`;
+    const addBtnText = isSello && !banlisted
+      ? `<span>+</span> Agregar al Mazo (x${currentInMain})`
+      : `<span>+</span> Agregar al Mazo (${currentCombined}/${maxCopies})`;
 
     content.innerHTML = `
-      <div class="inspector-card-col" id="inspector-card-container"></div>
+      <div class="inspector-card-col" id="inspector-card-container">
+        <span class="inspector-zoom-hint">🔍 Clic en la carta para verla en pantalla completa</span>
+      </div>
       <div class="inspector-details-col">
-        <div class="inspector-name">${card.name}</div>
+        <div class="inspector-name">${escapeHtml(card.name)}</div>
         <div class="inspector-meta-row">
           <span class="inspector-badge" style="background: ${elementInfo.glow}; color: #ffffff; border: 1px solid ${elementInfo.color};">
             ${elementInfo.icon} ${elementInfo.name}
           </span>
           <span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: var(--text-secondary); border: 1px solid var(--border-medium);">
-            ${card.type}
+            ${escapeHtml(card.type)}
           </span>
           ${rarityBadgeHtml}
           <span class="inspector-badge" style="background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid #38bdf8;">
@@ -925,15 +1198,15 @@
         </div>
 
         <div class="inspector-desc-box">
-          <p>${card.description}</p>
+          <p>${escapeHtml(card.description)}</p>
         </div>
 
         <div class="inspector-flavor">
-          ${card.flavor}
+          ${escapeHtml(card.flavor)}
         </div>
 
         <div class="inspector-actions">
-          <button id="btn-inspector-add" class="btn btn-primary" ${!isSello && currentInDeck >= maxCopies ? 'disabled' : ''}>
+          <button id="btn-inspector-add" class="btn btn-primary" ${!canAddCardToDeck(card.id, 'main').allowed ? 'disabled' : ''}>
             ${addBtnText}
           </button>
         </div>
@@ -941,12 +1214,22 @@
     `;
 
     const cardElem = createCardElement(card, { draggable: false });
-    content.querySelector('#inspector-card-container').appendChild(cardElem);
+    const cardContainer = content.querySelector('#inspector-card-container');
+    cardContainer.insertBefore(cardElem, cardContainer.firstChild);
+
+    const inspectFace = cardElem.querySelector('.tcg-card');
+    if (inspectFace) {
+      inspectFace.classList.add('is-zoomable');
+      inspectFace.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCardFullscreen(card);
+      });
+    }
 
     const addBtn = content.querySelector('#btn-inspector-add');
     if (addBtn) {
       addBtn.addEventListener('click', () => {
-        const result = addCardToDeck(card.id);
+        const result = addCardToDeck(card.id, 'main');
         if (result.success) {
           playCardDrop();
           openCardInspector(card.id);
@@ -954,12 +1237,67 @@
       });
     }
 
-    modal.classList.add('is-open');
+    if (!modal.classList.contains('is-open')) modal.returnFocus = document.activeElement;
+  modal.classList.add('is-open');
+  document.getElementById('btn-close-inspector')?.focus();
   }
+
+function initCardInspector() {
+  const modal = document.getElementById('modal-card-inspector');
+  const close = document.getElementById('btn-close-inspector');
+  close?.addEventListener('click', closeCardInspector);
+  modal?.addEventListener('click', event => {
+    if (event.target === modal) closeCardInspector();
+  });
+
+  const fsModal = document.getElementById('modal-card-fullscreen');
+  const fsClose = document.getElementById('btn-close-fullscreen-card');
+  fsClose?.addEventListener('click', closeCardFullscreen);
+  fsModal?.addEventListener('click', event => {
+    if (event.target === fsModal) closeCardFullscreen();
+  });
+
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Tab' && modal?.classList.contains('is-open')) {
+      const controls = [...modal.querySelectorAll('button:not(:disabled), [tabindex="0"]')];
+      const index = controls.indexOf(document.activeElement);
+      if (event.shiftKey && index <= 0) { event.preventDefault(); controls.at(-1)?.focus(); }
+      else if (!event.shiftKey && (index < 0 || index === controls.length-1)) { event.preventDefault(); controls[0]?.focus(); }
+    }
+    if (event.key === 'Escape') {
+      if (fsModal?.classList.contains('is-open')) { event.preventDefault(); closeCardFullscreen(); return; }
+      if (modal?.classList.contains('is-open')) { event.preventDefault(); closeCardInspector(); }
+    }
+  });
+}
 
   function closeCardInspector() {
     const modal = document.getElementById('modal-card-inspector');
-    if (modal) modal.classList.remove('is-open');
+    if (modal) { modal.classList.remove('is-open'); modal.returnFocus?.focus(); }
+  }
+
+  function openCardFullscreen(card) {
+    const modal = document.getElementById('modal-card-fullscreen');
+    const container = document.getElementById('fullscreen-card-container');
+    if (!modal || !container) return;
+
+    container.innerHTML = '';
+    const cardElem = createCardElement(card, { draggable: false });
+    const face = cardElem.querySelector('.tcg-card');
+    if (face) {
+      face.classList.add('is-fullscreen-face');
+      cardElem.addEventListener('click', () => closeCardFullscreen());
+    }
+    container.appendChild(cardElem);
+
+    if (!modal.classList.contains('is-open')) modal.returnFocus = document.activeElement;
+    modal.classList.add('is-open');
+    document.getElementById('btn-close-fullscreen-card')?.focus();
+  }
+
+  function closeCardFullscreen() {
+    const modal = document.getElementById('modal-card-fullscreen');
+    if (modal) { modal.classList.remove('is-open'); modal.returnFocus?.focus(); }
   }
 
   // ==========================================================================
@@ -1018,10 +1356,10 @@
 
     // Cost Bars 1 to 7+
     const labels = ['0', '1', '2', '3', '4', '5', '6', '7+'];
-    for (let idx = 1; idx <= 7; idx++) {
+    for (let idx = 0; idx <= 7; idx++) {
       const count = buckets[idx];
       const heightPercent = count > 0 ? Math.max(14, Math.round((count / maxCount) * 100)) : 0;
-      
+
       const col = document.createElement('div');
       col.className = 'mana-bar-col';
       col.title = `Coste ${labels[idx]}: ${count} carta(s). Clic para filtrar.`;
@@ -1051,8 +1389,42 @@
   // ==========================================================================
   // 7. DECK VIEW & COMPOSITION
   // ==========================================================================
+  function setupDeckGridInteractions(gridEl, target) {
+    if (!gridEl) return;
+
+    // Left click on a card: inspect it
+    gridEl.addEventListener('click', (e) => {
+      const cardWrapper = e.target.closest('.tcg-card-wrapper');
+      if (!cardWrapper) return;
+      const cardId = cardWrapper.dataset.cardId;
+      if (!cardId) return;
+      openCardInspector(cardId);
+    });
+
+    // Right click on a card: remove 1 copy from this deck
+    gridEl.addEventListener('contextmenu', (e) => {
+      const cardWrapper = e.target.closest('.tcg-card-wrapper');
+      if (!cardWrapper) return;
+      e.preventDefault();
+      const cardId = cardWrapper.dataset.cardId;
+      if (!cardId) return;
+      removeCardFromDeck(cardId, false, target);
+      playCardRemove();
+    });
+
+    gridEl.addEventListener('dblclick', (e) => {
+      const cardWrapper = e.target.closest('.tcg-card-wrapper');
+      if (cardWrapper && cardWrapper.dataset.cardId) {
+        e.stopPropagation();
+        removeCardFromDeck(cardWrapper.dataset.cardId, false, target);
+        playCardRemove();
+      }
+    });
+  }
+
   function initDeckView() {
     const deckGrid = document.getElementById('deck-grid');
+    const sideDeckGrid = document.getElementById('side-deck-grid');
     const extraDeckGrid = document.getElementById('extra-deck-grid');
     const deckNameInput = document.getElementById('deck-name-input');
 
@@ -1063,47 +1435,16 @@
       });
     }
 
-    if (deckGrid) {
-      deckGrid.addEventListener('click', (e) => {
-        const btn = e.target.closest('button');
-        const cardWrapper = e.target.closest('.tcg-card-wrapper');
-        if (!cardWrapper) return;
-
-        const cardId = cardWrapper.dataset.cardId;
-        if (!cardId) return;
-
-        if (btn) {
-          const action = btn.dataset.action;
-          if (action === 'increment') {
-            e.stopPropagation();
-            const res = addCardToDeck(cardId);
-            if (res.success) {
-              playCardDrop();
-            } else {
-              showToast(res.reason, 'warning');
-            }
-          } else if (action === 'decrement') {
-            e.stopPropagation();
-            removeCardFromDeck(cardId, false);
-            playCardRemove();
-          } else if (action === 'inspect') {
-            e.stopPropagation();
-            openCardInspector(cardId);
-          }
-        } else {
-          openCardInspector(cardId);
-        }
-      });
-
-      deckGrid.addEventListener('dblclick', (e) => {
-        const cardWrapper = e.target.closest('.tcg-card-wrapper');
-        if (cardWrapper && cardWrapper.dataset.cardId) {
-          e.stopPropagation();
-          removeCardFromDeck(cardWrapper.dataset.cardId, false);
-          playCardRemove();
-        }
-      });
+    // Keep every deck visible without scrolling: recompute the card size when the space changes
+    const deckArea = document.querySelector('.deck-scrollable-area');
+    if (deckArea && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(fitDeckLayout).observe(deckArea);
+    } else {
+      window.addEventListener('resize', fitDeckLayout);
     }
+
+    setupDeckGridInteractions(deckGrid, 'main');
+    setupDeckGridInteractions(sideDeckGrid, 'side');
 
     if (extraDeckGrid) {
       extraDeckGrid.addEventListener('click', (e) => {
@@ -1113,6 +1454,46 @@
         }
       });
     }
+  }
+
+  function renderDeckGrid(gridEl, deckArr, emptyStateEl) {
+    if (!gridEl) return;
+    if (deckArr.length === 0) {
+      gridEl.innerHTML = '';
+      if (emptyStateEl) emptyStateEl.style.display = 'flex';
+    } else {
+      if (emptyStateEl) emptyStateEl.style.display = 'none';
+      gridEl.innerHTML = '';
+
+      deckArr.forEach((item, index) => {
+        const card = getCardById(item.cardId);
+        if (!card) return;
+
+        const cardElem = createCardElement(card, {
+          isDeckItem: true,
+          deckCount: item.count,
+          draggable: true
+        });
+        cardElem.dataset.deckIndex = index;
+        gridEl.appendChild(cardElem);
+      });
+    }
+  }
+
+  function renderSideDeck() {
+    const sideDeckGrid = document.getElementById('side-deck-grid');
+    const sideEmptyState = document.getElementById('side-deck-empty-state');
+    const sideTotalElem = document.getElementById('side-deck-total-count');
+    const sideCountPill = document.getElementById('side-deck-count-pill');
+
+    const sideTotal = getDeckTotalCount('side');
+    if (sideTotalElem) sideTotalElem.textContent = sideTotal;
+    if (sideCountPill) {
+      sideCountPill.classList.toggle('is-over', sideTotal > state.maxSideDeckSize);
+      sideCountPill.classList.toggle('is-valid', sideTotal === state.maxSideDeckSize);
+    }
+
+    renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState);
   }
 
   function renderDeck() {
@@ -1127,7 +1508,7 @@
 
     if (!deckGrid) return;
 
-    const totalCount = getDeckTotalCount();
+    const totalCount = getDeckTotalCount('main');
 
     if (totalCountElem) totalCountElem.textContent = totalCount;
 
@@ -1135,40 +1516,23 @@
       countPill.classList.remove('is-valid', 'is-over');
       statusBadge.className = 'deck-status-badge';
 
-      if (totalCount === 40) {
+      if (totalCount === state.maxDeckSize) {
         countPill.classList.add('is-valid');
         statusBadge.classList.add('is-ready');
-        statusBadge.textContent = 'Listo (40/40)';
-      } else if (totalCount > 40) {
+        statusBadge.textContent = `Listo (${totalCount}/${state.maxDeckSize})`;
+      } else if (totalCount > state.maxDeckSize) {
         countPill.classList.add('is-over');
         statusBadge.classList.add('is-overlimit');
-        statusBadge.textContent = `Exceso (${totalCount}/40)`;
+        statusBadge.textContent = `Exceso (${totalCount}/${state.maxDeckSize})`;
       } else {
         statusBadge.classList.add('is-incomplete');
-        statusBadge.textContent = `Incompleto (${totalCount}/40)`;
+        statusBadge.textContent = `Incompleto (${totalCount}/${state.maxDeckSize})`;
       }
     }
 
-    if (state.deck.length === 0) {
-      deckGrid.innerHTML = '';
-      if (emptyState) emptyState.style.display = 'flex';
-    } else {
-      if (emptyState) emptyState.style.display = 'none';
-      deckGrid.innerHTML = '';
+    renderDeckGrid(deckGrid, state.deck, emptyState);
 
-      state.deck.forEach((item, index) => {
-        const card = getCardById(item.cardId);
-        if (!card) return;
-
-        const cardElem = createCardElement(card, {
-          isDeckItem: true,
-          deckCount: item.count,
-          draggable: true
-        });
-        cardElem.dataset.deckIndex = index;
-        deckGrid.appendChild(cardElem);
-      });
-    }
+    renderSideDeck();
 
     const activeTokens = getActiveExtraDeckTokens();
     if (extraCountElem) extraCountElem.textContent = activeTokens.length;
@@ -1193,6 +1557,81 @@
 
     updateDeckCompositionStats();
     renderManaCurve();
+
+    fitDeckLayout();
+  }
+
+  // ── Fit-to-window layout ─────────────────────────────────────────────────────
+  // Main, Side and Extra decks are always fully visible: instead of scrolling, the card
+  // size is recomputed from the free space and the number of cards in each deck.
+  const FIT_CARD_ASPECT = 1.4;   // card height / width (5:7 cards)
+  const FIT_MAX_CARD_W = 150;
+  const FIT_MIN_CARD_W = 44;     // below this size the area scrolls as a last resort
+  const FIT_EXTRA_SCALE = 0.75;  // tokens are automatic and shown smaller than Main/Side cards
+
+  function fitGapFor(cardW) {
+    return Math.round(Math.min(12, Math.max(4, cardW * 0.09)));
+  }
+
+  function fitDeckLayout() {
+    const area = document.querySelector('.deck-scrollable-area');
+    if (!area) return;
+
+    const areaStyle = getComputedStyle(area);
+    const availableH = area.clientHeight - parseFloat(areaStyle.paddingTop) - parseFloat(areaStyle.paddingBottom);
+    const areaGap = parseFloat(areaStyle.rowGap) || 0;
+
+    const decks = [
+      { gridId: 'deck-grid', sectionSelector: '.deck-main-section', scale: 1 },
+      { gridId: 'side-deck-grid', sectionSelector: '#side-deck-panel', scale: 1 },
+      { gridId: 'extra-deck-grid', sectionSelector: '#extra-deck-panel', scale: FIT_EXTRA_SCALE }
+    ].map(deck => {
+      const grid = document.getElementById(deck.gridId);
+      const section = area.querySelector(deck.sectionSelector);
+      if (!grid || !section) return null;
+      return {
+        grid,
+        scale: deck.scale,
+        count: grid.children.length,
+        width: grid.clientWidth,
+        // Everything in the section that is not the card grid (title, padding, borders)
+        overhead: section.offsetHeight - grid.offsetHeight
+      };
+    }).filter(Boolean);
+
+    if (decks.length === 0 || availableH <= 0) return;
+
+    const budget = availableH - areaGap * (decks.length - 1);
+
+    // Total height needed by all decks when main/side cards are `w` pixels wide
+    const neededHeight = (w) => decks.reduce((total, deck) => {
+      const cardW = Math.max(FIT_MIN_CARD_W * deck.scale, Math.floor(w * deck.scale));
+      const gap = fitGapFor(cardW);
+      const columns = Math.max(1, Math.floor((deck.width + gap) / (cardW + gap)));
+      const rows = Math.max(1, Math.ceil(deck.count / columns)); // an empty deck keeps one row as drop target
+      return total + deck.overhead + rows * Math.ceil(cardW * FIT_CARD_ASPECT) + (rows - 1) * gap;
+    }, 0);
+
+    let low = FIT_MIN_CARD_W;
+    let high = FIT_MAX_CARD_W;
+    let best = FIT_MIN_CARD_W;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (neededHeight(mid) <= budget) {
+        best = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    decks.forEach(deck => {
+      const cardW = Math.max(FIT_MIN_CARD_W * deck.scale, Math.floor(best * deck.scale));
+      deck.grid.style.setProperty('--fit-card-w', cardW + 'px');
+      deck.grid.style.setProperty('--fit-card-h', Math.ceil(cardW * FIT_CARD_ASPECT) + 'px');
+      deck.grid.style.setProperty('--fit-gap', fitGapFor(cardW) + 'px');
+      deck.grid.dataset.cardSize = cardW >= 110 ? 'lg' : (cardW >= 80 ? 'md' : (cardW >= 60 ? 'sm' : 'xs'));
+    });
   }
 
   function updateDeckCompositionStats() {
@@ -1280,7 +1719,8 @@
 
       scaleSlider.addEventListener('input', (e) => {
         const scale = parseFloat(e.target.value);
-        setFilter('cardScale', scale);
+        state.filters.cardScale = scale;
+        saveToLocalStorage();
         if (scaleValueText) scaleValueText.textContent = `${Math.round(scale * 100)}%`;
         applyCardScale(scale);
       });
@@ -1358,29 +1798,34 @@
 
     const libraryGrid = document.getElementById('library-grid');
     if (libraryGrid) {
+      // Left click only inspects the card. A card is added to the deck with a right click
+      // (or by dragging it to the deck), so a stray click never changes the deck.
       libraryGrid.addEventListener('click', (e) => {
         const cardWrapper = e.target.closest('.tcg-card-wrapper');
-        if (!cardWrapper) return;
-
-        const cardId = cardWrapper.dataset.cardId;
-        if (!cardId) return;
-
-        const check = canAddCardToDeck(cardId);
-        if (check.allowed) {
-          addCardToDeck(cardId);
-          playCardDrop();
-          const card = CARDS_DATA.find(c => c.id === cardId);
-          showToast(`Agregado: ${card ? card.name : 'Carta'} al mazo`, 'success');
-        } else {
-          showToast(check.reason, 'warning');
+        if (cardWrapper && cardWrapper.dataset.cardId) {
+          openCardInspector(cardWrapper.dataset.cardId);
         }
       });
 
       libraryGrid.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const cardWrapper = e.target.closest('.tcg-card-wrapper');
-        if (cardWrapper && cardWrapper.dataset.cardId) {
-          openCardInspector(cardWrapper.dataset.cardId);
+        if (!cardWrapper) return;
+
+        const cardId = cardWrapper.dataset.cardId;
+        if (!cardId) return;
+
+        // If the Main Deck is already full, a right-click adds the card to the Side Deck instead
+        const target = getDeckTotalCount('main') >= state.maxDeckSize ? 'side' : 'main';
+
+        const check = canAddCardToDeck(cardId, target);
+        if (check.allowed) {
+          addCardToDeck(cardId, target);
+          playCardDrop();
+          const card = CARDS_DATA.find(c => c.id === cardId);
+          showToast(`Agregado: ${card ? card.name : 'Carta'} al ${target === 'side' ? 'Side Deck' : 'mazo'}`, 'success');
+        } else {
+          showToast(check.reason, 'warning');
         }
       });
     }
@@ -1485,21 +1930,40 @@
       if (emptyState) emptyState.style.display = 'flex';
     } else {
       if (emptyState) emptyState.style.display = 'none';
-      libraryGrid.innerHTML = '';
+      const previous = new Map([...libraryGrid.querySelectorAll('.tcg-card-wrapper')].map(node => [node.dataset.cardId, node]));
+    const fragment = document.createDocumentFragment();
 
       filtered.forEach(card => {
-        const currentInDeck = getCardCountInDeck(card.id);
+        const currentInDeck = getCombinedCardCount(card.id);
         const maxAllowed = getMaxAllowedCopies(card.id);
         const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+        const banlisted = isCardBanlisted(card.id);
         const isMaxInDeck = !isSello && currentInDeck >= maxAllowed;
 
-        const cardElem = createCardElement(card, {
+        const cardElem = previous.get(card.id) || createCardElement(card, {
           isDeckItem: false,
           isMaxInDeck,
           draggable: card.type !== 'Token' && !card.isToken
         });
-        libraryGrid.appendChild(cardElem);
+        const face = cardElem.querySelector('.tcg-card');
+      face.classList.toggle('is-max-in-deck', isMaxInDeck);
+      face.classList.toggle('is-banlisted', banlisted);
+      let badge = face.querySelector('.library-card-in-deck-badge');
+      if (currentInDeck > 0) {
+        if (!badge) { badge = document.createElement('div'); face.appendChild(badge); }
+        badge.className = 'library-card-in-deck-badge' + (isMaxInDeck ? ' is-max' : '');
+        badge.textContent = isSello && !banlisted ? `x${currentInDeck}` : `${currentInDeck}/${maxAllowed}`;
+        badge.title = `${currentInDeck} copias entre Mazo Principal y Side Deck`;
+      } else if (badge) badge.remove();
+      let banBadge = face.querySelector('.card-banlist-badge');
+      if (banlisted) {
+        if (!banBadge) { banBadge = document.createElement('div'); banBadge.className = 'card-banlist-badge'; face.appendChild(banBadge); }
+        banBadge.textContent = `🚫 ${maxAllowed}`;
+        banBadge.title = `Restricción de Banlist: máximo ${maxAllowed} copias entre Mazo Principal y Side Deck`;
+      } else if (banBadge) banBadge.remove();
+      fragment.appendChild(cardElem);
       });
+    libraryGrid.replaceChildren(fragment);
     }
   }
 
@@ -1508,11 +1972,83 @@
   // ==========================================================================
   let draggedData = null;
 
+  function parseDragPayload(e) {
+    let payload = draggedData;
+    if (!payload) {
+      try {
+        const json = e.dataTransfer.getData('application/json');
+        if (json) payload = JSON.parse(json);
+      } catch {
+        const textCardId = e.dataTransfer.getData('text/plain');
+        if (textCardId) payload = { source: 'library', cardId: textCardId, index: -1 };
+      }
+    }
+    return payload;
+  }
+
+  function setupDeckDropzone(dropzoneEl, gridSelector, target) {
+    if (!dropzoneEl) return;
+
+    dropzoneEl.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      if (draggedData) dropzoneEl.classList.add('is-drag-over');
+    });
+
+    dropzoneEl.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = draggedData && draggedData.source === 'library' ? 'copy' : 'move';
+    });
+
+    dropzoneEl.addEventListener('dragleave', (e) => {
+      if (!dropzoneEl.contains(e.relatedTarget)) {
+        dropzoneEl.classList.remove('is-drag-over');
+      }
+    });
+
+    dropzoneEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzoneEl.classList.remove('is-drag-over');
+
+      const payload = parseDragPayload(e);
+      if (!payload || !payload.cardId) return;
+
+      if (payload.source === 'library') {
+        const check = canAddCardToDeck(payload.cardId, target);
+        if (check.allowed) {
+          addCardToDeck(payload.cardId, target);
+          playCardDrop();
+          const card = getCardById(payload.cardId);
+          showToast(`Agregado: ${card ? card.name : 'Carta'} al ${target === 'side' ? 'Side Deck' : 'mazo'}`, 'success');
+        } else {
+          showToast(check.reason, 'warning');
+        }
+      } else if (payload.source === target) {
+        const targetCardWrapper = e.target.closest(`${gridSelector} .tcg-card-wrapper`);
+        if (targetCardWrapper && targetCardWrapper.dataset.deckIndex !== undefined) {
+          const targetIndex = parseInt(targetCardWrapper.dataset.deckIndex, 10);
+          if (payload.index !== -1 && targetIndex !== payload.index) {
+            reorderDeck(payload.index, targetIndex, target);
+            playCardDrop();
+          }
+        }
+      } else if (payload.source === 'main' || payload.source === 'side') {
+        // Dropped a Main Deck card onto the Side Deck, or vice versa: move 1 copy across
+        const result = moveCardBetweenDecks(payload.cardId, payload.source);
+        const card = getCardById(payload.cardId);
+        if (result.success) {
+          playCardDrop();
+          showToast(`Movida 1 copia de ${card ? card.name : 'la carta'} al ${target === 'side' ? 'Side Deck' : 'Mazo Principal'}`, 'success');
+        } else {
+          showToast(result.reason, 'warning');
+        }
+      }
+    });
+  }
+
   function initDragAndDrop() {
     const deckDropzone = document.getElementById('deck-dropzone');
-    const trashDropzone = document.getElementById('trash-dropzone');
-
-    if (!deckDropzone || !trashDropzone) return;
+    const sideDeckDropzone = document.getElementById('side-deck-dropzone');
+    const libraryGrid = document.getElementById('library-grid');
 
     document.addEventListener('dragstart', (e) => {
       const cardElem = e.target.closest('.tcg-card');
@@ -1522,13 +2058,14 @@
       if (!wrapper) return;
 
       const cardId = wrapper.dataset.cardId;
-      const isDeckItem = wrapper.closest('.deck-grid') !== null;
-      const isLibraryItem = wrapper.closest('.library-grid') !== null;
-
       if (!cardId) return;
 
-      const source = isDeckItem ? 'deck' : (isLibraryItem ? 'library' : 'other');
-      const index = isDeckItem ? parseInt(wrapper.dataset.deckIndex, 10) : -1;
+      const isMainItem = wrapper.closest('#deck-grid') !== null;
+      const isSideItem = wrapper.closest('#side-deck-grid') !== null;
+      const isLibraryItem = wrapper.closest('#library-grid') !== null;
+
+      const source = isMainItem ? 'main' : (isSideItem ? 'side' : (isLibraryItem ? 'library' : 'other'));
+      const index = (isMainItem || isSideItem) ? parseInt(wrapper.dataset.deckIndex, 10) : -1;
 
       draggedData = { source, cardId, index };
 
@@ -1539,7 +2076,9 @@
       cardElem.classList.add('is-dragging');
       playCardPickup();
 
-      if (isDeckItem) trashDropzone.classList.add('is-active');
+      if ((isMainItem || isSideItem) && libraryGrid) {
+        libraryGrid.classList.add('is-remove-target');
+      }
     });
 
     document.addEventListener('dragend', (e) => {
@@ -1547,103 +2086,52 @@
       if (cardElem) cardElem.classList.remove('is-dragging');
 
       if (deckDropzone) deckDropzone.classList.remove('is-drag-over');
-      if (trashDropzone) {
-        trashDropzone.classList.remove('is-active');
-        trashDropzone.classList.remove('is-drag-over');
+      if (sideDeckDropzone) sideDeckDropzone.classList.remove('is-drag-over');
+      if (libraryGrid) {
+        libraryGrid.classList.remove('is-remove-target');
+        libraryGrid.classList.remove('is-drag-over');
       }
 
       draggedData = null;
     });
 
-    deckDropzone.addEventListener('dragenter', (e) => {
-      e.preventDefault();
-      if (draggedData) deckDropzone.classList.add('is-drag-over');
-    });
+    setupDeckDropzone(deckDropzone, '#deck-grid', 'main');
+    setupDeckDropzone(sideDeckDropzone, '#side-deck-grid', 'side');
 
-    deckDropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = draggedData && draggedData.source === 'library' ? 'copy' : 'move';
-    });
-
-    deckDropzone.addEventListener('dragleave', (e) => {
-      if (!deckDropzone.contains(e.relatedTarget)) {
-        deckDropzone.classList.remove('is-drag-over');
-      }
-    });
-
-    deckDropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      deckDropzone.classList.remove('is-drag-over');
-
-      let payload = draggedData;
-      if (!payload) {
-        try {
-          const json = e.dataTransfer.getData('application/json');
-          if (json) payload = JSON.parse(json);
-        } catch {
-          const textCardId = e.dataTransfer.getData('text/plain');
-          if (textCardId) payload = { source: 'library', cardId: textCardId };
+    if (libraryGrid) {
+      libraryGrid.addEventListener('dragenter', (e) => {
+        if (draggedData && (draggedData.source === 'main' || draggedData.source === 'side')) {
+          e.preventDefault();
+          libraryGrid.classList.add('is-drag-over');
         }
-      }
+      });
 
-      if (!payload || !payload.cardId) return;
+      libraryGrid.addEventListener('dragover', (e) => {
+        if (draggedData && (draggedData.source === 'main' || draggedData.source === 'side')) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+        }
+      });
 
-      if (payload.source === 'library') {
-        const check = canAddCardToDeck(payload.cardId);
-        if (check.allowed) {
-          addCardToDeck(payload.cardId);
-          playCardDrop();
+      libraryGrid.addEventListener('dragleave', (e) => {
+        if (!libraryGrid.contains(e.relatedTarget)) {
+          libraryGrid.classList.remove('is-drag-over');
+        }
+      });
+
+      libraryGrid.addEventListener('drop', (e) => {
+        const payload = parseDragPayload(e);
+        libraryGrid.classList.remove('is-drag-over');
+
+        if (payload && (payload.source === 'main' || payload.source === 'side') && payload.cardId) {
+          e.preventDefault();
+          removeCardFromDeck(payload.cardId, true, payload.source);
+          playCardRemove();
           const card = getCardById(payload.cardId);
-          showToast(`Agregado: ${card ? card.name : 'Carta'} al mazo`, 'success');
-        } else {
-          showToast(check.reason, 'warning');
+          showToast(`Removido: ${card ? card.name : 'Carta'} del ${payload.source === 'side' ? 'Side Deck' : 'mazo'}`, 'info');
         }
-      } else if (payload.source === 'deck') {
-        const targetCardWrapper = e.target.closest('.deck-grid .tcg-card-wrapper');
-        if (targetCardWrapper && targetCardWrapper.dataset.deckIndex !== undefined) {
-          const targetIndex = parseInt(targetCardWrapper.dataset.deckIndex, 10);
-          if (payload.index !== -1 && targetIndex !== payload.index) {
-            reorderDeck(payload.index, targetIndex);
-            playCardDrop();
-          }
-        }
-      }
-    });
-
-    trashDropzone.addEventListener('dragenter', (e) => {
-      e.preventDefault();
-      trashDropzone.classList.add('is-drag-over');
-    });
-
-    trashDropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-    });
-
-    trashDropzone.addEventListener('dragleave', () => {
-      trashDropzone.classList.remove('is-drag-over');
-    });
-
-    trashDropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      trashDropzone.classList.remove('is-drag-over');
-      trashDropzone.classList.remove('is-active');
-
-      let payload = draggedData;
-      if (!payload) {
-        try {
-          const json = e.dataTransfer.getData('application/json');
-          if (json) payload = JSON.parse(json);
-        } catch {}
-      }
-
-      if (payload && payload.source === 'deck' && payload.cardId) {
-        removeCardFromDeck(payload.cardId, false);
-        playCardRemove();
-        const card = getCardById(payload.cardId);
-        showToast(`Removida 1 copia de ${card ? card.name : 'Carta'}`, 'info');
-      }
-    });
+      });
+    }
   }
 
   // ==========================================================================
@@ -1766,29 +2254,45 @@
   }
 
   function renderHand() {
-    const container = document.getElementById('test-hand-cards-grid');
-    const remainingCountElem = document.getElementById('test-hand-remaining-count');
-    if (!container) return;
+    const cardsContainer = document.getElementById('test-hand-cards');
+    const statsContainer = document.getElementById('test-hand-stats');
+    const avgManaSpan = document.getElementById('hand-avg-mana');
 
-    if (remainingCountElem) remainingCountElem.textContent = remainingDeck.length;
-    container.innerHTML = '';
+    if (!cardsContainer) return;
+    cardsContainer.innerHTML = '';
 
+    let manaSum = 0;
     currentHand.forEach((item, index) => {
-      const cardWrapper = createCardElement(item.card, {
+      manaSum += item.card.cost;
+
+      const cardElem = createCardElement(item.card, {
         isHandItem: true,
         draggable: false
       });
 
-      if (item.selectedForMulligan) cardWrapper.classList.add('selected-for-mulligan');
+      if (item.selectedForMulligan) {
+        cardElem.classList.add('is-selected-mulligan');
+      }
 
-      cardWrapper.addEventListener('click', () => {
+      // Toggle selection on click
+      cardElem.addEventListener('click', () => {
         playClick();
         item.selectedForMulligan = !item.selectedForMulligan;
-        cardWrapper.classList.toggle('selected-for-mulligan', item.selectedForMulligan);
+        cardElem.classList.toggle('is-selected-mulligan', item.selectedForMulligan);
       });
 
-      container.appendChild(cardWrapper);
+      cardsContainer.appendChild(cardElem);
     });
+
+    const avgCost = currentHand.length > 0 ? (manaSum / currentHand.length).toFixed(1) : '0.0';
+    if (avgManaSpan) avgManaSpan.textContent = `Coste promedio en mano: ${avgCost}`;
+    if (statsContainer) {
+      statsContainer.innerHTML = `
+        <span>Mano actual: <strong>${currentHand.length}</strong> cartas</span> &bull;
+        <span>Restantes en mazo: <strong>${remainingDeck.length}</strong></span> &bull;
+        <span>Coste medio: <strong>${avgCost}</strong></span>
+      `;
+    }
   }
 
   // ==========================================================================
@@ -1803,7 +2307,7 @@
     toast.className = `toast toast-${type}`;
     toast.innerHTML = `
       <span class="toast-icon">${icons[type] || '✨'}</span>
-      <span class="toast-text">${message}</span>
+      <span class="toast-text">${escapeHtml(message)}</span>
     `;
 
     container.appendChild(toast);
@@ -1828,6 +2332,51 @@
         showToast(enabled ? 'Efectos de sonido activados' : 'Efectos de sonido silenciados', 'info');
       });
     }
+  }
+
+  function initPoolUpdatesButton() {
+    const btn = document.getElementById('btn-check-pool-updates');
+    if (!btn) return;
+
+    const defaultLabel = btn.querySelector('.btn-label')?.textContent || 'Buscar Actualizaciones';
+
+    btn.addEventListener('click', async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      const label = btn.querySelector('.btn-label');
+      if (label) label.textContent = 'Buscando...';
+
+      try {
+        const result = await checkForPoolUpdates((current, total) => {
+          if (label) label.textContent = `Cargando ${current}/${total}...`;
+        });
+
+        if (!result.success) {
+          if (result.cancelled) {
+            // closed the picker: not an error
+          } else if (result.unsupported) {
+            showToast(result.reason, 'warning');
+          } else {
+            showToast(result.reason || 'No se pudo actualizar la pool base.', 'danger');
+          }
+          return;
+        }
+
+        if (result.added === 0) {
+          showToast('La pool base ya está actualizada: no se encontraron cartas nuevas.', 'info');
+        } else {
+          const setsText = result.sets.length ? ` (${result.sets.join(', ')})` : '';
+          showToast(`Se agregaron ${result.added} carta${result.added === 1 ? '' : 's'} nueva${result.added === 1 ? '' : 's'} de la pool base${setsText}.`, 'success');
+          renderLibrary();
+          renderDeck();
+        }
+      } catch (err) {
+        showToast('No se pudo actualizar la pool base: ' + (err && err.message ? err.message : err), 'danger');
+      } finally {
+        btn.disabled = false;
+        if (label) label.textContent = defaultLabel;
+      }
+    });
   }
 
   function initClearDeckButton() {
@@ -1920,6 +2469,7 @@
         }
 
         if (res.success) {
+        document.getElementById('deck-name-input').value = state.deckName;
           showToast(`¡Mazo importado con éxito (${res.count} cartas cargadas)!`, 'success');
           if (modal) modal.classList.remove('is-open');
         } else {
@@ -1971,8 +2521,12 @@
       selectFilesBtn.addEventListener('click', () => inputFiles.click());
     }
 
-    const handleFiles = async (files) => {
+    let importing = false;
+  const handleFiles = async (files) => {
       if (!files || files.length === 0) return;
+    if (importing) return;
+    importing = true;
+    try {
 
       if (progressBox) progressBox.style.display = 'flex';
       if (resultsSummary) resultsSummary.style.display = 'none';
@@ -1996,8 +2550,8 @@
             const chip = document.createElement('div');
             chip.className = 'preview-chip';
             chip.innerHTML = `
-              <span class="preview-chip-name" title="${c.name}">${c.name}</span>
-              <span class="preview-chip-meta">${c.type} • ${c.cost}💧</span>
+              <span class="preview-chip-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+              <span class="preview-chip-meta">${escapeHtml(c.type)} • ${c.cost}💧</span>
             `;
             cardsPreview.appendChild(chip);
           });
@@ -2006,8 +2560,18 @@
         renderLibrary();
         renderDeck();
       } else {
-        showToast('No se encontraron imágenes válidas en la selección.', 'warning');
+        showToast('No hay imágenes nuevas: la selección está vacía, no contiene imágenes o ya fue importada.', 'warning');
       }
+    } catch (error) {
+      showToast(error.message || 'No se pudo completar la importación.', 'danger');
+    } finally {
+      importing = false;
+      if (progressBox) progressBox.style.display = 'none';
+      document.getElementById('input-import-folder').value = '';
+      document.getElementById('input-import-files').value = '';
+      renderLibrary();
+    }
+
     };
 
     if (inputFolder) {
@@ -2066,11 +2630,638 @@
   }
 
   // ==========================================================================
+  // 12. BANLIST MANAGER (PERSISTENT PER-CARD COPY LIMIT OVERRIDES)
+  // ==========================================================================
+  function defaultLimitFor(card) {
+    const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+    if (isSello) return state.maxDeckSize;
+    return RARITY_LIMITS[card.rarity] || 4;
+  }
+
+  function initSavedDecksModal() {
+    const modal = document.getElementById('modal-saved-decks');
+    const openBtn = document.getElementById('btn-saved-decks');
+    const closeBtn = document.getElementById('btn-close-saved-decks');
+    const closeFooterBtn = document.getElementById('btn-close-saved-decks-footer');
+    const nameInput = document.getElementById('saved-deck-name-input');
+    const saveBtn = document.getElementById('btn-save-deck');
+    const currentInfo = document.getElementById('saved-decks-current-info');
+    const listEl = document.getElementById('saved-decks-list');
+    const emptyMsg = document.getElementById('saved-decks-empty-msg');
+    const errorMsg = document.getElementById('saved-decks-error');
+
+    const closeModal = () => modal?.classList.remove('is-open');
+    const countOf = list => (Array.isArray(list) ? list : [])
+      .reduce((sum, item) => sum + (Number.isSafeInteger(item.count) ? item.count : 0), 0);
+
+    function formatDate(timestamp) {
+      try {
+        return new Date(timestamp).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+      } catch (err) {
+        return '';
+      }
+    }
+
+    function syncDeckNameInput() {
+      const input = document.getElementById('deck-name-input');
+      if (input) input.value = state.deckName;
+    }
+
+    function renderCurrentInfo() {
+      if (!currentInfo) return;
+      currentInfo.textContent = `Mazo actual: ${getDeckTotalCount('main')} cartas en el principal y ${getDeckTotalCount('side')} en el side deck.`;
+    }
+
+    function renderList() {
+      if (!listEl) return;
+      const result = listSavedDecks();
+
+      if (!result.success) {
+        listEl.innerHTML = '';
+        if (emptyMsg) emptyMsg.style.display = 'none';
+        if (errorMsg) {
+          errorMsg.textContent = result.reason;
+          errorMsg.style.display = 'block';
+        }
+        return;
+      }
+
+      if (errorMsg) errorMsg.style.display = 'none';
+      if (emptyMsg) emptyMsg.style.display = result.decks.length === 0 ? 'block' : 'none';
+
+      listEl.innerHTML = result.decks.map(deck => `
+        <div class="saved-deck-row" data-deck-id="${escapeHtml(deck.id)}">
+          <div class="saved-deck-info">
+            <span class="saved-deck-name" title="${escapeHtml(deck.name)}">${escapeHtml(deck.name)}</span>
+            <span class="saved-deck-meta">${countOf(deck.data.deck)} cartas &middot; Side ${countOf(deck.data.sideDeck)} &middot; ${escapeHtml(formatDate(deck.savedAt))}</span>
+          </div>
+          <button class="btn btn-primary btn-sm" data-action="load">Cargar</button>
+          <button class="btn btn-danger btn-sm" data-action="delete">Eliminar</button>
+        </div>
+      `).join('');
+    }
+
+    function saveDeck() {
+      let result = saveCurrentDeck(nameInput ? nameInput.value : '');
+      if (!result.success && result.exists) {
+        if (!confirm('Ya existe un mazo guardado con ese nombre. ¿Quieres sobrescribirlo?')) return;
+        result = saveCurrentDeck(nameInput ? nameInput.value : '', { overwrite: true });
+      }
+
+      if (result.success) {
+        playCardDrop();
+        syncDeckNameInput();
+        showToast(result.overwritten ? `Mazo «${state.deckName}» sobrescrito.` : `Mazo «${state.deckName}» guardado en este navegador.`, 'success');
+        renderCurrentInfo();
+        renderList();
+      } else {
+        showToast(result.reason, 'warning');
+      }
+    }
+
+    function loadDeck(id, name) {
+      const hasCards = state.deck.length > 0 || state.sideDeck.length > 0;
+      if (hasCards && !isCurrentDeckSaved() &&
+          !confirm(`El mazo actual no está guardado y se reemplazará por «${name}». ¿Quieres continuar?`)) {
+        return;
+      }
+
+      const result = loadSavedDeck(id);
+      if (result.success) {
+        playCardDrop();
+        syncDeckNameInput();
+        const sideText = result.sideCount ? ` + ${result.sideCount} en el side deck` : '';
+        showToast(`Mazo «${name}» cargado (${result.count} cartas${sideText}).`, 'success');
+        closeModal();
+      } else {
+        showToast(result.reason || 'No se pudo cargar el mazo.', 'danger');
+      }
+    }
+
+    function deleteDeck(id, name) {
+      if (!confirm(`¿Eliminar el mazo guardado «${name}»? Esta acción no se puede deshacer.`)) return;
+      const result = deleteSavedDeck(id);
+      if (result.success) {
+        showToast(`Mazo guardado «${name}» eliminado.`, 'info');
+      } else {
+        showToast(result.reason, 'warning');
+      }
+      renderList();
+    }
+
+    if (openBtn) {
+      openBtn.addEventListener('click', () => {
+        playClick();
+        if (nameInput) nameInput.value = state.deckName;
+        renderCurrentInfo();
+        renderList();
+        modal?.classList.add('is-open');
+        if (nameInput) {
+          nameInput.focus();
+          nameInput.select();
+        }
+      });
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (closeFooterBtn) closeFooterBtn.addEventListener('click', closeModal);
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal?.classList.contains('is-open')) closeModal();
+    });
+
+    if (saveBtn) saveBtn.addEventListener('click', saveDeck);
+    if (nameInput) {
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') saveDeck();
+      });
+    }
+
+    if (listEl) {
+      listEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        const row = e.target.closest('.saved-deck-row');
+        if (!btn || !row) return;
+
+        const id = row.dataset.deckId;
+        const listed = listSavedDecks();
+        const entry = listed.success ? listed.decks.find(deck => deck.id === id) : null;
+        if (!entry) {
+          showToast('El mazo guardado ya no existe.', 'warning');
+          renderList();
+          return;
+        }
+
+        if (btn.dataset.action === 'load') loadDeck(id, entry.name);
+        else if (btn.dataset.action === 'delete') deleteDeck(id, entry.name);
+      });
+    }
+  }
+
+  const POOL_DB_NAME = 'AetheriumTCG_CustomCardsDB';
+  const POOL_STORE = 'pool_cards';
+  const CONFIG_STORE = 'app_config';
+  const CONFIG_KEY_HANDLE = 'cartasDirHandle';
+  const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp)$/i;
+
+  let poolDbInstance = null;
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      try {
+        const request = indexedDB.open(POOL_DB_NAME, 3);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('custom_cards')) {
+            db.createObjectStore('custom_cards', { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(POOL_STORE)) {
+            db.createObjectStore(POOL_STORE, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(CONFIG_STORE)) {
+            db.createObjectStore(CONFIG_STORE, { keyPath: 'key' });
+          }
+        };
+        request.onsuccess = (e) => { poolDbInstance = e.target.result; resolve(poolDbInstance); };
+        request.onerror = () => reject(request.error || new Error('No se pudo abrir el almacenamiento local.'));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async function getDB() {
+    return poolDbInstance || openDB();
+  }
+
+  function savePoolCardToDB(card) {
+    return getDB().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction(POOL_STORE, 'readwrite');
+      tx.objectStore(POOL_STORE).put(card);
+      tx.oncomplete = () => resolve();
+      tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo guardar una carta de la pool base.'));
+    }));
+  }
+
+  function loadSavedPoolCards() {
+    return getDB().then(db => new Promise((resolve) => {
+      try {
+        const request = db.transaction(POOL_STORE, 'readonly').objectStore(POOL_STORE).getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => resolve([]);
+      } catch (err) {
+        resolve([]);
+      }
+    })).catch(() => []);
+  }
+
+  function saveDirHandle(handle) {
+    return getDB().then(db => new Promise((resolve) => {
+      try {
+        const tx = db.transaction(CONFIG_STORE, 'readwrite');
+        tx.objectStore(CONFIG_STORE).put({ key: CONFIG_KEY_HANDLE, handle });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = tx.onabort = () => resolve(false); // not fatal: the user can just pick the folder again next time
+      } catch (err) {
+        resolve(false);
+      }
+    })).catch(() => false);
+  }
+
+  function loadDirHandle() {
+    return getDB().then(db => new Promise((resolve) => {
+      try {
+        const request = db.transaction(CONFIG_STORE, 'readonly').objectStore(CONFIG_STORE).get(CONFIG_KEY_HANDLE);
+        request.onsuccess = () => resolve(request.result ? request.result.handle : null);
+        request.onerror = () => resolve(null);
+      } catch (err) {
+        resolve(null);
+      }
+    })).catch(() => null);
+  }
+
+  /** Loads whatever the base pool already has cached; called once on app startup, no folder access needed. */
+  function initPoolCards() {
+    return openDB()
+      .then(loadSavedPoolCards)
+      .then(cards => {
+        cards.forEach(card => {
+          if (!CARDS_DATA.some(c => c.id === card.id)) CARDS_DATA.push(card);
+        });
+        return cards;
+      })
+      .catch(() => []);
+  }
+
+  function isPoolUpdateSupported() {
+    return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
+  }
+
+  // ── Deterministic ids ─────────────────────────────────────────────────────────
+  // Pool card ids are derived from their path (e.g. "SET-1/Alazul_..."), not random,
+  // so the same file always gets the same id across scans, app restarts and saved decks.
+  function hashPath(text) {
+    // FNV-1a 32-bit: small, dependency-free, stable across sessions and browsers.
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  // Filename parsing reuses the TYPE_MAP / RARITY_MAP / ELEMENT_MAP / cleanCardName
+  // already defined above for the custom card importer (same documented format).
+
+  /**
+   * Parses one image's relative path (e.g. "SET-1/Nombre_Tipo_Rareza_Faccion_ATK_DEF_Coste.webp")
+   * into a pool card object. `catalogEntry`, when a matching row from catalogo-original.json
+   * exists for this path, is used only to fill in `description`/`flavor` with the real card
+   * text — it never overrides the type, rarity, element or stats the filename encodes, since
+   * that format is the one documented in cartas/README.md and covered by the app's tests.
+   */
+  function parsePoolCardFromPath(relPath, dataUrl, catalogEntry) {
+    const filename = relPath.split('/').pop();
+    const base = filename.substring(0, filename.lastIndexOf('.')) || filename;
+    const parts = base.split('_');
+    const firstPart = (parts[0] || '').toLowerCase().trim();
+    const id = 'pool_' + hashPath(relPath);
+
+    const common = { id, source: relPath, imageUrl: dataUrl, isPool: true };
+
+    if (firstPart === 'sello') {
+      const planetKey = parts.length > 2 ? parts[2].toLowerCase().trim() : (parts[1] || 'marte').toLowerCase().trim();
+      const element = ELEMENT_MAP[planetKey] || 'neutral';
+      const name = parts.length > 2 ? `Sello de ${cleanCardName(parts[1])}` : `Sello de ${cleanCardName(planetKey)}`;
+      return {
+        ...common,
+        name,
+        element,
+        type: 'Sello',
+        rarity: null,
+        cost: 0,
+        attack: null,
+        health: null,
+        description: (catalogEntry && catalogEntry.description) || `Sello elemental de ${element.toUpperCase()}. Genera 1 punto de maná de ${element.toUpperCase()}.`,
+        flavor: (catalogEntry && catalogEntry.lore) || `"La resonancia cósmica de ${element} fluye a través de este sello sagrado."`,
+        isSello: true
+      };
+    }
+
+    if (firstPart === 'token') {
+      const planetKey = parts.length > 2 ? parts[2].toLowerCase().trim() : (parts[1] || 'marte').toLowerCase().trim();
+      const element = ELEMENT_MAP[planetKey] || 'neutral';
+      const tokenName = parts.length > 2 ? cleanCardName(parts[1]) : `Token de ${cleanCardName(planetKey)}`;
+      return {
+        ...common,
+        name: tokenName,
+        element,
+        type: 'Token',
+        rarity: 'Common',
+        cost: 0,
+        attack: 1,
+        health: 1,
+        description: (catalogEntry && catalogEntry.description) || `Token de Facción (${element.toUpperCase()}). Se invoca automáticamente en el Mazo Extra cuando tu mazo contiene cartas de ${element.toUpperCase()}.`,
+        flavor: (catalogEntry && catalogEntry.lore) || `"Ficha elemental invocada por la presencia de ${element}."`,
+        isToken: true
+      };
+    }
+
+    const name = cleanCardName(parts[0] || 'Carta');
+    const rawType = (parts[1] || 'Criatura').toLowerCase().replace(/\s+/g, '').trim();
+    const rawRarity = (parts[2] || 'Comun').toLowerCase().trim();
+    const rawColor = (parts[3] || 'Neutral').toLowerCase().trim();
+    const rawAtk = parts[4];
+    const rawDef = parts[5];
+    const rawCost = parts[6] || parts[parts.length - 1];
+
+    const type = TYPE_MAP[rawType] || 'Criatura';
+    let rarity = RARITY_MAP[rawRarity] || 'Common';
+    const element = ELEMENT_MAP[rawColor] || 'neutral';
+    const isSello = type === 'Sello';
+    if (isSello) rarity = null;
+
+    let attack = null;
+    let health = null;
+    if (type === 'Criatura') {
+      const pAtk = parseInt(rawAtk, 10);
+      const pDef = parseInt(rawDef, 10);
+      attack = isNaN(pAtk) ? 1 : Math.max(0, pAtk);
+      health = isNaN(pDef) ? 1 : Math.max(1, pDef);
+    }
+
+    let cost = 0;
+    if (!isSello && rawCost !== undefined) {
+      const match = String(rawCost).match(/\d+/);
+      if (match) cost = parseInt(match[0], 10);
+    }
+
+    return {
+      ...common,
+      name: (catalogEntry && catalogEntry.name) || name,
+      element,
+      type,
+      rarity,
+      cost: Math.max(0, Math.min(20, cost)),
+      attack,
+      health,
+      description: (catalogEntry && catalogEntry.description) || `Carta de tipo ${type} alineada con el planeta ${element.toUpperCase()}.`,
+      flavor: (catalogEntry && catalogEntry.lore) || `"${name} se manifiesta desde los archivos de la pool base."`,
+      isToken: type === 'Token',
+      isSello
+    };
+  }
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reader.onabort = () => reject(new Error('No se pudo leer: ' + file.name));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /** Recursively walks a directory handle, yielding { relPath, fileHandle } for every image file. */
+  async function* walkImages(dirHandle, prefix = '') {
+    for await (const entry of dirHandle.values()) {
+      const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.kind === 'directory') {
+        yield* walkImages(entry, relPath);
+      } else if (entry.kind === 'file' && IMAGE_EXTENSIONS.test(entry.name)) {
+        yield { relPath, fileHandle: entry };
+      }
+    }
+  }
+
+  /** Best-effort read of catalogo-original.json at the folder root, keyed by its `archivo` field. */
+  async function readCatalog(dirHandle) {
+    try {
+      const fileHandle = await dirHandle.getFileHandle('catalogo-original.json');
+      const file = await fileHandle.getFile();
+      const parsed = JSON.parse(await file.text());
+      const list = Array.isArray(parsed) ? parsed : (parsed.cards || []);
+      const map = new Map();
+      for (const entry of list) {
+        if (entry && typeof entry.archivo === 'string') {
+          map.set(entry.archivo.replace(/\\\\/g, '/'), entry);
+        }
+      }
+      return map;
+    } catch (err) {
+      return new Map(); // optional file: filename-only parsing still works without it
+    }
+  }
+
+  async function ensurePermission(handle) {
+    const opts = { mode: 'read' };
+    if ((await handle.queryPermission(opts)) === 'granted') return true;
+    return (await handle.requestPermission(opts)) === 'granted';
+  }
+
+  /**
+   * Scans the linked `cartas` folder and adds any image not already in the pool.
+   * Must be called directly from a click handler the first time (showDirectoryPicker
+   * needs a user gesture); once a folder is linked, later calls only need read
+   * permission, which the browser may grant silently.
+   */
+  async function checkForPoolUpdates(onProgress) {
+    if (!isPoolUpdateSupported()) {
+      return { success: false, unsupported: true, reason: 'Tu navegador no admite esta función (probá con Chrome o Edge). Usá "Importar Cartas" para cargar la pool base a mano.' };
+    }
+
+    let dirHandle = await loadDirHandle();
+    try {
+      if (dirHandle) {
+        if (!(await ensurePermission(dirHandle))) {
+          dirHandle = null; // permission revoked: fall through to asking again below
+        }
+      }
+      if (!dirHandle) {
+        dirHandle = await window.showDirectoryPicker({ id: 'tcg-deckbuilder-cartas', mode: 'read' });
+        await saveDirHandle(dirHandle);
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return { success: false, cancelled: true };
+      return { success: false, reason: 'No se pudo acceder a la carpeta: ' + (err && err.message ? err.message : err) };
+    }
+
+    const known = new Set(CARDS_DATA.filter(c => c.isPool && c.source).map(c => c.source));
+    const catalog = await readCatalog(dirHandle);
+
+    const toImport = [];
+    const setsSeen = new Set();
+    try {
+      for await (const { relPath, fileHandle } of walkImages(dirHandle)) {
+        setsSeen.add(relPath.split('/')[0]);
+        if (!known.has(relPath)) toImport.push({ relPath, fileHandle });
+      }
+    } catch (err) {
+      return { success: false, reason: 'No se pudo leer el contenido de la carpeta: ' + (err && err.message ? err.message : err) };
+    }
+
+    if (toImport.length === 0) {
+      return { success: true, added: 0, sets: [...setsSeen].sort() };
+    }
+
+    const newSets = new Set();
+    for (let i = 0; i < toImport.length; i++) {
+      const { relPath, fileHandle } = toImport[i];
+      const file = await fileHandle.getFile();
+      const dataUrl = await readFileAsDataURL(file);
+      const card = parsePoolCardFromPath(relPath, dataUrl, catalog.get(relPath));
+      if (!CARDS_DATA.some(c => c.id === card.id)) {
+        await savePoolCardToDB(card);
+        CARDS_DATA.push(card);
+        newSets.add(relPath.split('/')[0]);
+      }
+      if (onProgress) onProgress(i + 1, toImport.length, card);
+    }
+
+    return { success: true, added: toImport.length, sets: [...newSets].sort() };
+  }
+
+  function initBanlistModal() {
+    const modal = document.getElementById('modal-banlist');
+    const openBtn = document.getElementById('btn-banlist');
+    const closeBtn = document.getElementById('btn-close-banlist');
+    const closeFooterBtn = document.getElementById('btn-close-banlist-footer');
+    const searchInput = document.getElementById('banlist-search');
+    const searchResults = document.getElementById('banlist-search-results');
+    const activeList = document.getElementById('banlist-active-list');
+    const emptyMsg = document.getElementById('banlist-empty-msg');
+
+    const closeModal = () => modal?.classList.remove('is-open');
+
+    function renderSearchResults(query) {
+      if (!searchResults) return;
+      const q = query.trim().toLowerCase();
+      if (!q) { searchResults.innerHTML = ''; return; }
+
+      const matches = CARDS_DATA
+        .filter(c => c.type !== 'Token' && !c.isToken && c.name.toLowerCase().includes(q))
+        .slice(0, 15);
+
+      if (matches.length === 0) {
+        searchResults.innerHTML = `<div class="banlist-no-results">No se encontraron cartas.</div>`;
+        return;
+      }
+
+      searchResults.innerHTML = matches.map(card => {
+        const base = defaultLimitFor(card);
+        const current = getBanlistLimit(card.id);
+        return `
+          <div class="banlist-row" data-card-id="${escapeHtml(card.id)}">
+            <span class="banlist-row-name" title="${escapeHtml(card.name)}">${escapeHtml(card.name)}</span>
+            <span class="banlist-row-default">Límite base: ${base}</span>
+            <input type="number" min="0" max="${state.maxDeckSize}" step="1" class="banlist-limit-input" value="${current !== undefined ? current : base}">
+            <button class="btn btn-secondary btn-sm" data-action="apply">Aplicar</button>
+            ${current !== undefined ? `<button class="btn btn-danger btn-sm" data-action="clear">Quitar</button>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderActiveList() {
+      if (!activeList) return;
+      const entries = Object.entries(state.banlist);
+      if (entries.length === 0) {
+        activeList.innerHTML = '';
+        if (emptyMsg) emptyMsg.style.display = 'block';
+        return;
+      }
+      if (emptyMsg) emptyMsg.style.display = 'none';
+      activeList.innerHTML = entries.map(([cardId, limit]) => {
+        const card = CARDS_DATA.find(c => c.id === cardId);
+        const name = card ? card.name : cardId;
+        return `
+          <div class="banlist-active-row" data-card-id="${escapeHtml(cardId)}">
+            <span class="banlist-row-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+            <span class="banlist-row-limit">🚫 Límite: ${limit}</span>
+            <button class="btn btn-danger btn-sm" data-action="clear">Quitar</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    if (openBtn) {
+      openBtn.addEventListener('click', () => {
+        playClick();
+        if (searchInput) searchInput.value = '';
+        renderSearchResults('');
+        renderActiveList();
+        modal?.classList.add('is-open');
+        searchInput?.focus();
+      });
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (closeFooterBtn) closeFooterBtn.addEventListener('click', closeModal);
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal?.classList.contains('is-open')) closeModal();
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => renderSearchResults(e.target.value));
+    }
+
+    function handleRowAction(container, rowSelector) {
+      container.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const row = e.target.closest(rowSelector);
+        if (!row) return;
+        const cardId = row.dataset.cardId;
+        const card = CARDS_DATA.find(c => c.id === cardId);
+        const cardName = card ? card.name : cardId;
+
+        if (btn.dataset.action === 'apply') {
+          const input = row.querySelector('.banlist-limit-input');
+          const res = setBanlistLimit(cardId, input ? input.value : NaN);
+          if (res.success) {
+            showToast(`Límite de banlist actualizado para ${cardName}`, 'success');
+          } else {
+            showToast(res.reason, 'warning');
+          }
+        } else if (btn.dataset.action === 'clear') {
+          clearBanlistLimit(cardId);
+          showToast(`Restricción eliminada para ${cardName}`, 'info');
+        }
+
+        renderSearchResults(searchInput ? searchInput.value : '');
+        renderActiveList();
+      });
+    }
+
+    if (searchResults) handleRowAction(searchResults, '.banlist-row');
+    if (activeList) handleRowAction(activeList, '.banlist-active-row');
+
+    subscribeToBanlist(() => {
+      if (modal?.classList.contains('is-open')) {
+        renderSearchResults(searchInput ? searchInput.value : '');
+        renderActiveList();
+      }
+    });
+  }
+
+  // ==========================================================================
   // INITIALIZATION ON DOM READY
   // ==========================================================================
   document.addEventListener('DOMContentLoaded', async () => {
+  initCardInspector();
     // 1. Initialize IndexedDB and load saved custom cards
     await initIndexedDB();
+
+    // 1b. Load whatever base pool (cartas/SET-N) was already scanned in a previous visit
+    await initPoolCards();
 
     // 2. Load Active Deck State
     loadInitialState();
@@ -2084,6 +3275,9 @@
     initClearDeckButton();
     initExportImportModal();
     initCardImporterModal();
+    initBanlistModal();
+    initSavedDecksModal();
+    initPoolUpdatesButton();
 
     // 4. Bind Subscriptions
     subscribeToDeck(() => {
@@ -2092,6 +3286,11 @@
     });
 
     subscribeToFilters(() => {
+      renderLibrary();
+    });
+
+    subscribeToBanlist(() => {
+      renderDeck();
       renderLibrary();
     });
 

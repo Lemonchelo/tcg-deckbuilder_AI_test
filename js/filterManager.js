@@ -4,7 +4,7 @@
  */
 
 import { CARDS_DATA } from './cardsData.js';
-import { state, setFilter, resetFilters, addCardToDeck, canAddCardToDeck, getCardCountInDeck, getMaxAllowedCopies } from './state.js';
+import { state, setCardScale, setFilter, resetFilters, addCardToDeck, canAddCardToDeck, getCombinedCardCount, getMaxAllowedCopies, isCardBanlisted, getDeckTotalCount } from './state.js';
 import { createCardElement, openCardInspector } from './cardInspector.js';
 import { playClick, playCardDrop } from './sound.js';
 import { showToast } from './app.js';
@@ -44,7 +44,7 @@ export function initFilters() {
 
     scaleSlider.addEventListener('input', (e) => {
       const scale = parseFloat(e.target.value);
-      setFilter('cardScale', scale);
+      setCardScale(scale);
       if (scaleValueText) {
         scaleValueText.textContent = `${Math.round(scale * 100)}%`;
       }
@@ -131,29 +131,34 @@ export function initFilters() {
   // 9. Library Grid Item Click
   const libraryGrid = document.getElementById('library-grid');
   if (libraryGrid) {
+    // Left click only inspects the card. A card is added to the deck with a right click
+    // (or by dragging it to the deck), so a stray click never changes the deck.
     libraryGrid.addEventListener('click', (e) => {
       const cardWrapper = e.target.closest('.tcg-card-wrapper');
-      if (!cardWrapper) return;
-
-      const cardId = cardWrapper.dataset.cardId;
-      if (!cardId) return;
-
-      const check = canAddCardToDeck(cardId);
-      if (check.allowed) {
-        addCardToDeck(cardId);
-        playCardDrop();
-        const card = CARDS_DATA.find(c => c.id === cardId);
-        showToast(`Agregado: ${card ? card.name : 'Carta'} al mazo`, 'success');
-      } else {
-        showToast(check.reason, 'warning');
+      if (cardWrapper && cardWrapper.dataset.cardId) {
+        openCardInspector(cardWrapper.dataset.cardId);
       }
     });
 
     libraryGrid.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const cardWrapper = e.target.closest('.tcg-card-wrapper');
-      if (cardWrapper && cardWrapper.dataset.cardId) {
-        openCardInspector(cardWrapper.dataset.cardId);
+      if (!cardWrapper) return;
+
+      const cardId = cardWrapper.dataset.cardId;
+      if (!cardId) return;
+
+      // If the Main Deck is already full, a right-click adds the card to the Side Deck instead
+      const target = getDeckTotalCount('main') >= state.maxDeckSize ? 'side' : 'main';
+
+      const check = canAddCardToDeck(cardId, target);
+      if (check.allowed) {
+        addCardToDeck(cardId, target);
+        playCardDrop();
+        const card = CARDS_DATA.find(c => c.id === cardId);
+        showToast(`Agregado: ${card ? card.name : 'Carta'} al ${target === 'side' ? 'Side Deck' : 'mazo'}`, 'success');
+      } else {
+        showToast(check.reason, 'warning');
       }
     });
   }
@@ -286,20 +291,42 @@ export function renderLibrary() {
     if (emptyState) emptyState.style.display = 'flex';
   } else {
     if (emptyState) emptyState.style.display = 'none';
-    libraryGrid.innerHTML = '';
+    const previous = new Map([...libraryGrid.querySelectorAll('.tcg-card-wrapper')].map(node => [node.dataset.cardId, node]));
+    const fragment = document.createDocumentFragment();
 
     filtered.forEach(card => {
-      const currentInDeck = getCardCountInDeck(card.id);
+      const currentInDeck = getCombinedCardCount(card.id);
       const maxAllowed = getMaxAllowedCopies(card.id);
       const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+      const banlisted = isCardBanlisted(card.id);
       const isMaxInDeck = !isSello && currentInDeck >= maxAllowed;
 
-      const cardElem = createCardElement(card, {
+      const cardElem = previous.get(card.id) || createCardElement(card, {
         isDeckItem: false,
         isMaxInDeck,
         draggable: card.type !== 'Token' && !card.isToken
       });
-      libraryGrid.appendChild(cardElem);
+      const face = cardElem.querySelector('.tcg-card');
+      face.classList.toggle('is-max-in-deck', isMaxInDeck);
+      face.classList.toggle('is-banlisted', banlisted);
+
+      let badge = face.querySelector('.library-card-in-deck-badge');
+      if (currentInDeck > 0) {
+        if (!badge) { badge = document.createElement('div'); face.appendChild(badge); }
+        badge.className = 'library-card-in-deck-badge' + (isMaxInDeck ? ' is-max' : '');
+        badge.textContent = isSello && !banlisted ? `x${currentInDeck}` : `${currentInDeck}/${maxAllowed}`;
+        badge.title = `${currentInDeck} copias entre Mazo Principal y Side Deck`;
+      } else if (badge) badge.remove();
+
+      let banBadge = face.querySelector('.card-banlist-badge');
+      if (banlisted) {
+        if (!banBadge) { banBadge = document.createElement('div'); banBadge.className = 'card-banlist-badge'; face.appendChild(banBadge); }
+        banBadge.textContent = `🚫 ${maxAllowed}`;
+        banBadge.title = `Restricción de Banlist: máximo ${maxAllowed} copias entre Mazo Principal y Side Deck`;
+      } else if (banBadge) banBadge.remove();
+
+      fragment.appendChild(cardElem);
     });
+    libraryGrid.replaceChildren(fragment);
   }
 }

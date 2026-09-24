@@ -1,4 +1,4 @@
-# Aetherium TCG Deckbuilder Studio
+# STG TCG Deckbuilder
 
 Constructor de mazos para un TCG con **facciones planetarias**, cartas **Sello** (recursos) y un **Mazo Extra de Tokens** que se genera solo. Funciona 100 % en el navegador, sin dependencias ni backend: tus cartas se importan desde tus propias imágenes y todo se guarda localmente.
 
@@ -12,6 +12,8 @@ Constructor de mazos para un TCG con **facciones planetarias**, cartas **Sello**
 - [Análisis del mazo](#análisis-del-mazo)
 - [Inspector de cartas](#inspector-de-cartas)
 - [Probar mano (Mulligan)](#probar-mano-mulligan)
+- [Mis mazos guardados](#mis-mazos-guardados)
+- [Pool base y actualizaciones](#pool-base-y-actualizaciones)
 - [Exportar e importar mazos](#exportar-e-importar-mazos)
 - [Dónde se guardan los datos](#dónde-se-guardan-los-datos)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -25,7 +27,7 @@ Constructor de mazos para un TCG con **facciones planetarias**, cartas **Sello**
 2. Abrí `index.html` en el navegador (doble clic). No necesita servidor ni instalación.
    - Alternativa con servidor local: `python -m http.server 8000` y entrá a `http://localhost:8000`.
    - Las tipografías vienen de Google Fonts; sin internet la app funciona igual, con tipografías de reemplazo.
-3. La app arranca **sin cartas**. Hacé clic en **📁 Importar Cartas** y cargá tus imágenes (ver [Importar cartas](#importar-cartas)).
+3. La app arranca **sin cartas**. Hacé clic en **📁 Importar Cartas → Seleccionar Carpeta** y elegí la carpeta `cartas` incluida en el repositorio para cargar las **464 cartas de Rise of Gods**, o cargá tus propias imágenes (ver [Importar cartas](#importar-cartas)). Consultá [los formatos y límites del catálogo incluido](cartas/README.md).
 4. Armá tu mazo de 40 cartas desde la biblioteca de la derecha.
 
 ---
@@ -147,8 +149,8 @@ Hay varias formas de agregar y quitar cartas:
 
 | Acción | Cómo |
 |---|---|
-| Agregar una carta | **Clic** sobre la carta en la biblioteca, o **arrastrarla** a la zona del mazo |
-| Ver detalle de una carta | **Clic derecho** en la biblioteca, o **clic** sobre la carta en el mazo |
+| Agregar una carta | **Clic derecho** sobre la carta en la biblioteca, o **arrastrarla** a la zona del mazo |
+| Ver detalle de una carta | **Clic** sobre la carta, en la biblioteca o en el mazo |
 | Sumar una copia | Botón **+** que aparece al pasar el mouse sobre una carta del mazo |
 | Quitar una copia | Botón **−** sobre la carta, **doble clic** sobre ella, o arrastrarla a la **papelera** (aparece abajo al arrastrar una carta del mazo) |
 | Reordenar | Arrastrar una carta del mazo y soltarla sobre otra |
@@ -158,6 +160,12 @@ Hay varias formas de agregar y quitar cartas:
 Cada carta del mazo muestra una insignia **x N** con la cantidad de copias, y en la biblioteca una insignia **N/máx** indica cuántas copias llevás sobre el máximo de su rareza (para Sellos muestra solo **xN**).
 
 Si intentás agregar una carta que rompe una regla (límite de rareza alcanzado, mazo lleno, token), aparece un aviso explicando el motivo.
+
+### Tamaño de las cartas y ventana
+
+El Mazo Principal, el Side Deck y el Mazo Extra se muestran **siempre completos y a la vez**, sin scroll. Al agregar o quitar cartas, o al cambiar el tamaño de la ventana, el tamaño de las cartas se recalcula para que quepan todas: con pocas cartas son más grandes (hasta 150 px de ancho) y con muchas se achican. Los tokens se muestran un 25 % más chicos que el resto. Para que los controles sigan siendo usables, el botón 🔍 Inspeccionar solo aparece en cartas grandes; en las chicas alcanza con hacer clic sobre la carta.
+
+Si la ventana es tan chica que las cartas quedarían por debajo de 44 px de ancho (por ejemplo, un mazo completo en 1024×600), el panel pasa a tener scroll vertical como último recurso.
 
 ### Mazo Extra (Tokens)
 
@@ -186,7 +194,7 @@ Los filtros se combinan entre sí.
 
 En la parte superior del área del mazo:
 
-- **Curva de maná & Sellos:** gráfico de barras con la cantidad de cartas por coste (1 a 7+) y una columna aparte de Sellos (💎S). Muestra el **coste medio** de las cartas (sin contar Sellos). Hacer **clic en una barra** filtra la biblioteca por ese coste máximo; clic en 💎S filtra por Sellos.
+- **Curva de maná & Sellos:** gráfico de barras con la cantidad de cartas por coste (0 a 7+) y una columna aparte de Sellos (💎S). Muestra el **coste medio** de las cartas (sin contar Sellos). Hacer **clic en una barra** filtra la biblioteca por ese coste máximo; clic en 💎S filtra por Sellos.
 - **Composición del mazo:** cantidad de cartas por tipo (Criaturas, H. Rápido, H. Lento, Estructuras, Artefactos, Sellos, Terrenos).
 - **Distribución planetaria:** cuántas cartas tenés de cada planeta.
 
@@ -201,7 +209,7 @@ Abre una vista ampliada de la carta con efecto 3D (se inclina al mover el mouse)
 - Descripción y texto de ambientación.
 - Botón **Agregar al Mazo** con el contador de copias actual.
 
-Se abre con clic derecho sobre una carta de la biblioteca, con clic sobre una carta del mazo o con **🔍 Inspeccionar**. Los tokens del Mazo Extra también se pueden inspeccionar.
+Se abre con clic sobre una carta de la biblioteca o del mazo, o con **🔍 Inspeccionar**. El clic en la biblioteca solo inspecciona: nunca modifica el mazo. Los tokens del Mazo Extra también se pueden inspeccionar.
 
 ---
 
@@ -214,6 +222,52 @@ Se abre con clic derecho sobre una carta de la biblioteca, con clic sobre una ca
 3. **Hacer Mulligan** devuelve las marcadas al mazo, lo baraja y roba reemplazos.
 4. **Robar 1 Carta** suma una carta de la parte superior del mazo.
 5. **Nueva Mano** baraja todo de nuevo y reparte otra mano.
+
+---
+
+## Pool base y actualizaciones
+
+El botón **🔄 Buscar Actualizaciones** (barra superior) carga la pool base del juego directamente desde la carpeta `cartas/SET-N` del proyecto, sin tener que importar las imágenes a mano. Es independiente de **📁 Importar Cartas**, que sigue siendo el camino para tus propias cartas personalizadas.
+
+### Primer uso
+
+1. Hacé clic en **🔄 Buscar Actualizaciones**.
+2. El navegador te pide elegir una carpeta: seleccioná la carpeta `cartas` del proyecto (la que contiene `SET-1`, `SET-2`, etc.).
+3. La app recorre todas las subcarpetas, interpreta cada imagen con el mismo formato de nombre de archivo que **Importar Cartas** (ver [Formato de nombre de archivo](#formato-de-nombre-de-archivo)), y si existe `catalogo-original.json` en la raíz de esa carpeta, lo usa para completar la descripción y el texto de ambientación de las cartas que coincidan — nunca para cambiar su tipo, rareza, planeta o estadísticas, que siempre salen del nombre del archivo.
+4. Las cartas quedan guardadas en el navegador (en IndexedDB, aparte de tus cartas personalizadas). **No hace falta repetir este paso en cada apertura**: la próxima vez que abras la app, la pool base ya está ahí.
+
+### Buscar cartas nuevas (sets agregados después)
+
+Si el proyecto suma una carpeta `SET-N` nueva, alcanza con volver a hacer clic en **🔄 Buscar Actualizaciones**. La app vuelve a leer la carpeta vinculada y agrega solo las imágenes que no había visto antes (compara por su ruta relativa, por ejemplo `SET-7/Carta_Criatura_Rara_Marte_2_2_2.webp`). Si no hay nada nuevo, te avisa que la pool ya está actualizada.
+
+Cada carta de la pool tiene un identificador que sale de su ruta de archivo, no al azar: la misma imagen conserva siempre el mismo identificador entre reinicios y actualizaciones, así que un mazo que ya armaste no se rompe cuando aparece un set nuevo.
+
+### Limitaciones
+
+- Esta función usa una API del navegador (`showDirectoryPicker`) disponible en **Chrome y Edge**, no en Firefox ni Safari. En esos navegadores, el botón avisa que no está disponible; la pool base ahí se carga con **Importar Cartas**, seleccionando manualmente la carpeta `cartas`.
+- El navegador puede volver a pedir el permiso de la carpeta en algún momento (por ejemplo, si lo revocaste desde su configuración). En ese caso, el próximo clic en el botón simplemente vuelve a pedir la carpeta.
+- Las cartas de la pool base no se pueden borrar con **Borrar Cartas Personalizadas** (ese botón es solo para tus imágenes importadas a mano). Por ahora, quitarlas requiere borrar los datos del sitio en el navegador.
+
+---
+
+## Mis mazos guardados
+
+**💾 Mis mazos** (barra superior) guarda el mazo actual —principal y side deck— en el navegador, con un nombre, y lo vuelve a cargar cuando quieras, sin pasar por exportar e importar. Exportar / Importar sigue disponible y sirve para respaldar mazos o llevarlos a otro equipo.
+
+| Acción | Cómo |
+|---|---|
+| Guardar | Escribí un nombre (hasta 32 caracteres; viene con el nombre del mazo actual) y presioná **Guardar mazo actual** o Enter. El mazo activo toma ese nombre |
+| Sobrescribir | Guardar con un nombre que ya existe (sin distinguir mayúsculas) pide confirmación |
+| Cargar | **Cargar** en la fila del mazo. Reemplaza el mazo actual y cierra el modal |
+| Eliminar | **Eliminar** en la fila del mazo, con confirmación. No afecta al mazo actual |
+
+Detalles a tener en cuenta:
+
+- Cada mazo guardado usa el mismo formato que el JSON exportado, y **cargar pasa por las mismas validaciones que importar**: límites por rareza, banlist actual, side deck de hasta 15 cartas y tamaño máximo. Si una carga falla (por ejemplo, porque cambiaste la banlist o borraste cartas de la biblioteca), se muestra el motivo y el mazo actual no cambia.
+- Las cartas se buscan por identificador y, si no se encuentra, por nombre. Los mazos guardados necesitan que esas cartas estén en la biblioteca.
+- Si cargás un mazo mientras el actual tiene cartas y no coincide con ninguno guardado, se pide confirmación antes de reemplazarlo. No se pide si el mazo actual ya está guardado.
+- No se puede guardar un mazo vacío.
+- Los mazos guardados están **en este navegador**: no se sincronizan ni se comparten. Si el almacenamiento está lleno, bloqueado o los datos guardados están dañados, la app lo informa y no sobrescribe nada.
 
 ---
 
@@ -277,6 +331,9 @@ Todo queda **en tu navegador**; no se envía nada a ningún servidor.
 |---|---|---|
 | Cartas importadas (con sus imágenes) | IndexedDB | base `AetheriumTCG_CustomCardsDB` |
 | Mazo activo, nombre y zoom | localStorage | `aetherium_tcg_active_deck` |
+| Mazos guardados con nombre | localStorage | `aetherium_tcg_saved_decks` |
+| Pool base (cartas/SET-N) y sus imágenes | IndexedDB | store `pool_cards`, separado de tus cartas personalizadas |
+| Carpeta vinculada para buscar actualizaciones | IndexedDB | store `app_config` (solo en Chrome/Edge) |
 
 Consecuencias:
 
@@ -299,6 +356,8 @@ tcg-deckbuilder/
     ├── customCardImporter.js  # Parser de nombres de archivo + IndexedDB
     ├── cardsData.js    # Constantes de planetas y tipos
     ├── deckManager.js  # Vista del mazo y Mazo Extra
+    ├── savedDecksManager.js  # Modal "Mis mazos" (guardar, cargar, eliminar)
+    ├── poolManager.js  # Pool base desde cartas/SET-N ("Buscar Actualizaciones")
     ├── filterManager.js, dragAndDrop.js, manaCurve.js,
     │   cardInspector.js, testHand.js, sound.js
 ```
@@ -309,3 +368,11 @@ Al cambiar IDs o estructura del HTML, verificá que los `getElementById` del bun
 
 ---
 
+
+## Verificación de regresiones
+
+Ejecutá `node tests/regression.cjs` para comprobar, tanto en los módulos como en el bundle, los límites de importación, las entradas repetidas y la conservación del mazo ante errores.
+
+Con Playwright disponible y Microsoft Edge instalado, `node tests/browser.cjs` verifica la importación del catálogo, los cierres del inspector, la persistencia, los límites y la selección de cartas en la mano. Usa un perfil aislado. La variable opcional `SCREENSHOT_PATH` permite guardar una captura del detalle.
+
+La identidad visual es STG TCG Deckbuilder. Se mantienen las claves históricas de almacenamiento y el identificador de exportación para conservar la compatibilidad con las colecciones y mazos existentes.
