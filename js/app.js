@@ -13,6 +13,7 @@ import { initSoundState, toggleSound, isSoundEnabled, playClick, playCardDrop, p
 import { initIndexedDB, processImageFiles, clearCustomCardsDB } from './customCardImporter.js';
 import { initBanlistModal } from './banlistManager.js';
 import { initSavedDecksModal } from './savedDecksManager.js';
+import { initPoolCards, checkForPoolUpdates } from './poolManager.js';
 
 // ==================== TOAST NOTIFICATIONS ====================
 export function showToast(message, type = 'info') {
@@ -65,6 +66,52 @@ function initSoundButton() {
 }
 
 // ==================== CLEAR DECK MODAL / CONFIRM ====================
+// ==================== BASE POOL UPDATES (cartas/SET-N) ====================
+function initPoolUpdatesButton() {
+  const btn = document.getElementById('btn-check-pool-updates');
+  if (!btn) return;
+
+  const defaultLabel = btn.querySelector('.btn-label')?.textContent || 'Buscar Actualizaciones';
+
+  btn.addEventListener('click', async () => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    const label = btn.querySelector('.btn-label');
+    if (label) label.textContent = 'Buscando...';
+
+    try {
+      const result = await checkForPoolUpdates((current, total) => {
+        if (label) label.textContent = `Cargando ${current}/${total}...`;
+      });
+
+      if (!result.success) {
+        if (result.cancelled) {
+          // The user closed the folder picker: not an error, nothing to report
+        } else if (result.unsupported) {
+          showToast(result.reason, 'warning');
+        } else {
+          showToast(result.reason || 'No se pudo actualizar la pool base.', 'danger');
+        }
+        return;
+      }
+
+      if (result.added === 0) {
+        showToast('La pool base ya está actualizada: no se encontraron cartas nuevas.', 'info');
+      } else {
+        const setsText = result.sets.length ? ` (${result.sets.join(', ')})` : '';
+        showToast(`Se agregaron ${result.added} carta${result.added === 1 ? '' : 's'} nueva${result.added === 1 ? '' : 's'} de la pool base${setsText}.`, 'success');
+        renderLibrary();
+        renderDeck();
+      }
+    } catch (err) {
+      showToast('No se pudo actualizar la pool base: ' + (err && err.message ? err.message : err), 'danger');
+    } finally {
+      btn.disabled = false;
+      if (label) label.textContent = defaultLabel;
+    }
+  });
+}
+
 function initClearDeckButton() {
   const btn = document.getElementById('btn-clear-deck');
   if (btn) {
@@ -331,6 +378,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 1. Initialize IndexedDB for custom card persistence
   await initIndexedDB();
 
+  // 1b. Load whatever base pool (cartas/SET-N) was already scanned in a previous visit
+  await initPoolCards();
+
   // 2. Load Stored Data
   loadInitialState();
 
@@ -345,6 +395,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initClearDeckButton();
   initBanlistModal();
   initSavedDecksModal();
+  initPoolUpdatesButton();
 
   // 4. Subscribe to reactive state
   subscribeToDeck(() => {

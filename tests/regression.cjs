@@ -199,3 +199,51 @@ function checkSavedDecks(source, label) {
 }
 checkSavedDecks(bundle, 'Standalone bundle');
 checkSavedDecks(['cardsData.js','state.js'].map(p=>fs.readFileSync(path.join(root,'js',p),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'')).join('\n'), 'Modules');
+
+function checkPoolParser(source, label) {
+  const ctx = vm.createContext({ document:{addEventListener(){}}, localStorage:{getItem(){return null},setItem(){}}, console });
+  const api = 'globalThis.api = { CARDS_DATA, parsePoolCardFromPath };';
+  vm.runInContext(source.includes('(function()') ? source.replace(/\}\)\(\);\s*$/, api+'})();') : source+'\n'+api, ctx);
+  const a = ctx.api;
+  const parse = a.parsePoolCardFromPath;
+
+  // Standard card: type/rarity/element/stats/cost come from the filename
+  const c1a = parse('SET-1/Alazul_Criatura_Epica_Neptuno_1_4_4.webp', 'data:a');
+  assert.equal(c1a.name, 'Alazul');
+  assert.equal(c1a.type, 'Criatura'); assert.equal(c1a.rarity, 'Epic'); assert.equal(c1a.element, 'neptuno');
+  assert.equal(c1a.attack, 1); assert.equal(c1a.health, 4); assert.equal(c1a.cost, 4);
+  assert.equal(c1a.source, 'SET-1/Alazul_Criatura_Epica_Neptuno_1_4_4.webp');
+  assert.equal(c1a.isPool, true);
+  assert(c1a.id.startsWith('pool_'));
+
+  // Same path always yields the same id (stable across scans / restarts)
+  const c1b = parse('SET-1/Alazul_Criatura_Epica_Neptuno_1_4_4.webp', 'data:b');
+  assert.equal(c1a.id, c1b.id, 'the same path must produce the same id');
+  // A different path (even a different set) yields a different id
+  const c1c = parse('SET-2/Alazul_Criatura_Epica_Neptuno_1_4_4.webp', 'data:a');
+  assert.notEqual(c1a.id, c1c.id);
+
+  // Sello and Token formats
+  const seal = parse('SET-3/Sello_Marte.webp', 'data:s');
+  assert.equal(seal.type, 'Sello'); assert.equal(seal.rarity, null); assert.equal(seal.element, 'marte'); assert.equal(seal.cost, 0);
+  const token = parse('SET-3/Token_GuerreroMarciano_Marte.webp', 'data:t');
+  assert.equal(token.type, 'Token'); assert.equal(token.isToken, true); assert.equal(token.name, 'Guerrero Marciano');
+
+  // catalogo-original.json enriches description/flavor but never overrides the filename-derived rules
+  const enriched = parse('SET-6/¡Cuiden-el-nido!_HechizoLento_Epica_Tierra_0_0_4.webp', 'data:e',
+    { name: '¡Cuiden el nido!', description: 'Texto real de la carta.', lore: 'Frase de ambientación real.' });
+  assert.equal(enriched.name, '¡Cuiden el nido!');
+  assert.equal(enriched.description, 'Texto real de la carta.');
+  assert.equal(enriched.flavor, 'Frase de ambientación real.');
+  assert.equal(enriched.type, 'HechizoLento', 'catalog data must not override the type the filename encodes');
+  assert.equal(enriched.rarity, 'Epic');
+  assert.equal(enriched.element, 'tierra');
+
+  // Without a catalog match, generic text is used and nothing throws
+  const plain = parse('SET-1/Comerciante-de-Bambu_Criatura_Epica_Jupiter_3_3_3.webp', 'data:p');
+  assert(plain.description.length > 0); assert(plain.flavor.length > 0);
+
+  console.log(label + ": pool filename parser (stable ids, seal/token formats, catalog enrichment) passed");
+}
+checkPoolParser(bundle, 'Standalone bundle');
+checkPoolParser(['cardsData.js','poolManager.js'].map(p=>fs.readFileSync(path.join(root,'js',p),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'')).join('\n'), 'Modules');

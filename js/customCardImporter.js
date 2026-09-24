@@ -17,12 +17,20 @@ let dbInstance = null;
 export function initIndexedDB() {
   return new Promise((resolve) => {
     try {
-      const request = indexedDB.open(DB_NAME, 2);
+      const request = indexedDB.open(DB_NAME, 3);
 
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        }
+        // Added in v3 for the base card pool (poolManager.js); kept separate from
+        // custom_cards so "Borrar Cartas Personalizadas" never touches it.
+        if (!db.objectStoreNames.contains('pool_cards')) {
+          db.createObjectStore('pool_cards', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('app_config')) {
+          db.createObjectStore('app_config', { keyPath: 'key' });
         }
       };
 

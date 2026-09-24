@@ -13,6 +13,7 @@ Constructor de mazos para un TCG con **facciones planetarias**, cartas **Sello**
 - [Inspector de cartas](#inspector-de-cartas)
 - [Probar mano (Mulligan)](#probar-mano-mulligan)
 - [Mis mazos guardados](#mis-mazos-guardados)
+- [Pool base y actualizaciones](#pool-base-y-actualizaciones)
 - [Exportar e importar mazos](#exportar-e-importar-mazos)
 - [Dónde se guardan los datos](#dónde-se-guardan-los-datos)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -224,6 +225,31 @@ Se abre con clic sobre una carta de la biblioteca o del mazo, o con **🔍 Inspe
 
 ---
 
+## Pool base y actualizaciones
+
+El botón **🔄 Buscar Actualizaciones** (barra superior) carga la pool base del juego directamente desde la carpeta `cartas/SET-N` del proyecto, sin tener que importar las imágenes a mano. Es independiente de **📁 Importar Cartas**, que sigue siendo el camino para tus propias cartas personalizadas.
+
+### Primer uso
+
+1. Hacé clic en **🔄 Buscar Actualizaciones**.
+2. El navegador te pide elegir una carpeta: seleccioná la carpeta `cartas` del proyecto (la que contiene `SET-1`, `SET-2`, etc.).
+3. La app recorre todas las subcarpetas, interpreta cada imagen con el mismo formato de nombre de archivo que **Importar Cartas** (ver [Formato de nombre de archivo](#formato-de-nombre-de-archivo)), y si existe `catalogo-original.json` en la raíz de esa carpeta, lo usa para completar la descripción y el texto de ambientación de las cartas que coincidan — nunca para cambiar su tipo, rareza, planeta o estadísticas, que siempre salen del nombre del archivo.
+4. Las cartas quedan guardadas en el navegador (en IndexedDB, aparte de tus cartas personalizadas). **No hace falta repetir este paso en cada apertura**: la próxima vez que abras la app, la pool base ya está ahí.
+
+### Buscar cartas nuevas (sets agregados después)
+
+Si el proyecto suma una carpeta `SET-N` nueva, alcanza con volver a hacer clic en **🔄 Buscar Actualizaciones**. La app vuelve a leer la carpeta vinculada y agrega solo las imágenes que no había visto antes (compara por su ruta relativa, por ejemplo `SET-7/Carta_Criatura_Rara_Marte_2_2_2.webp`). Si no hay nada nuevo, te avisa que la pool ya está actualizada.
+
+Cada carta de la pool tiene un identificador que sale de su ruta de archivo, no al azar: la misma imagen conserva siempre el mismo identificador entre reinicios y actualizaciones, así que un mazo que ya armaste no se rompe cuando aparece un set nuevo.
+
+### Limitaciones
+
+- Esta función usa una API del navegador (`showDirectoryPicker`) disponible en **Chrome y Edge**, no en Firefox ni Safari. En esos navegadores, el botón avisa que no está disponible; la pool base ahí se carga con **Importar Cartas**, seleccionando manualmente la carpeta `cartas`.
+- El navegador puede volver a pedir el permiso de la carpeta en algún momento (por ejemplo, si lo revocaste desde su configuración). En ese caso, el próximo clic en el botón simplemente vuelve a pedir la carpeta.
+- Las cartas de la pool base no se pueden borrar con **Borrar Cartas Personalizadas** (ese botón es solo para tus imágenes importadas a mano). Por ahora, quitarlas requiere borrar los datos del sitio en el navegador.
+
+---
+
 ## Mis mazos guardados
 
 **💾 Mis mazos** (barra superior) guarda el mazo actual —principal y side deck— en el navegador, con un nombre, y lo vuelve a cargar cuando quieras, sin pasar por exportar e importar. Exportar / Importar sigue disponible y sirve para respaldar mazos o llevarlos a otro equipo.
@@ -306,6 +332,8 @@ Todo queda **en tu navegador**; no se envía nada a ningún servidor.
 | Cartas importadas (con sus imágenes) | IndexedDB | base `AetheriumTCG_CustomCardsDB` |
 | Mazo activo, nombre y zoom | localStorage | `aetherium_tcg_active_deck` |
 | Mazos guardados con nombre | localStorage | `aetherium_tcg_saved_decks` |
+| Pool base (cartas/SET-N) y sus imágenes | IndexedDB | store `pool_cards`, separado de tus cartas personalizadas |
+| Carpeta vinculada para buscar actualizaciones | IndexedDB | store `app_config` (solo en Chrome/Edge) |
 
 Consecuencias:
 
@@ -329,6 +357,7 @@ tcg-deckbuilder/
     ├── cardsData.js    # Constantes de planetas y tipos
     ├── deckManager.js  # Vista del mazo y Mazo Extra
     ├── savedDecksManager.js  # Modal "Mis mazos" (guardar, cargar, eliminar)
+    ├── poolManager.js  # Pool base desde cartas/SET-N ("Buscar Actualizaciones")
     ├── filterManager.js, dragAndDrop.js, manaCurve.js,
     │   cardInspector.js, testHand.js, sound.js
 ```

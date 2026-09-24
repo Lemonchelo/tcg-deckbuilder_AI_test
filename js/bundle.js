@@ -139,11 +139,17 @@ function escapeHtml(value) {
   function initIndexedDB() {
     return new Promise((resolve) => {
       try {
-        const request = indexedDB.open(DB_NAME, 2);
+        const request = indexedDB.open(DB_NAME, 3);
         request.onupgradeneeded = (e) => {
           const db = e.target.result;
           if (!db.objectStoreNames.contains(STORE_NAME)) {
             db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains('pool_cards')) {
+            db.createObjectStore('pool_cards', { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains('app_config')) {
+            db.createObjectStore('app_config', { keyPath: 'key' });
           }
         };
         request.onsuccess = (e) => {
@@ -2296,6 +2302,51 @@ function initCardInspector() {
     }
   }
 
+  function initPoolUpdatesButton() {
+    const btn = document.getElementById('btn-check-pool-updates');
+    if (!btn) return;
+
+    const defaultLabel = btn.querySelector('.btn-label')?.textContent || 'Buscar Actualizaciones';
+
+    btn.addEventListener('click', async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      const label = btn.querySelector('.btn-label');
+      if (label) label.textContent = 'Buscando...';
+
+      try {
+        const result = await checkForPoolUpdates((current, total) => {
+          if (label) label.textContent = `Cargando ${current}/${total}...`;
+        });
+
+        if (!result.success) {
+          if (result.cancelled) {
+            // closed the picker: not an error
+          } else if (result.unsupported) {
+            showToast(result.reason, 'warning');
+          } else {
+            showToast(result.reason || 'No se pudo actualizar la pool base.', 'danger');
+          }
+          return;
+        }
+
+        if (result.added === 0) {
+          showToast('La pool base ya está actualizada: no se encontraron cartas nuevas.', 'info');
+        } else {
+          const setsText = result.sets.length ? ` (${result.sets.join(', ')})` : '';
+          showToast(`Se agregaron ${result.added} carta${result.added === 1 ? '' : 's'} nueva${result.added === 1 ? '' : 's'} de la pool base${setsText}.`, 'success');
+          renderLibrary();
+          renderDeck();
+        }
+      } catch (err) {
+        showToast('No se pudo actualizar la pool base: ' + (err && err.message ? err.message : err), 'danger');
+      } finally {
+        btn.disabled = false;
+        if (label) label.textContent = defaultLabel;
+      }
+    });
+  }
+
   function initClearDeckButton() {
     const btn = document.getElementById('btn-clear-deck');
     if (btn) {
@@ -2719,6 +2770,328 @@ function initCardInspector() {
     }
   }
 
+  const POOL_DB_NAME = 'AetheriumTCG_CustomCardsDB';
+  const POOL_STORE = 'pool_cards';
+  const CONFIG_STORE = 'app_config';
+  const CONFIG_KEY_HANDLE = 'cartasDirHandle';
+  const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp)$/i;
+
+  let poolDbInstance = null;
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      try {
+        const request = indexedDB.open(POOL_DB_NAME, 3);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('custom_cards')) {
+            db.createObjectStore('custom_cards', { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(POOL_STORE)) {
+            db.createObjectStore(POOL_STORE, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(CONFIG_STORE)) {
+            db.createObjectStore(CONFIG_STORE, { keyPath: 'key' });
+          }
+        };
+        request.onsuccess = (e) => { poolDbInstance = e.target.result; resolve(poolDbInstance); };
+        request.onerror = () => reject(request.error || new Error('No se pudo abrir el almacenamiento local.'));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async function getDB() {
+    return poolDbInstance || openDB();
+  }
+
+  function savePoolCardToDB(card) {
+    return getDB().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction(POOL_STORE, 'readwrite');
+      tx.objectStore(POOL_STORE).put(card);
+      tx.oncomplete = () => resolve();
+      tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo guardar una carta de la pool base.'));
+    }));
+  }
+
+  function loadSavedPoolCards() {
+    return getDB().then(db => new Promise((resolve) => {
+      try {
+        const request = db.transaction(POOL_STORE, 'readonly').objectStore(POOL_STORE).getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => resolve([]);
+      } catch (err) {
+        resolve([]);
+      }
+    })).catch(() => []);
+  }
+
+  function saveDirHandle(handle) {
+    return getDB().then(db => new Promise((resolve) => {
+      try {
+        const tx = db.transaction(CONFIG_STORE, 'readwrite');
+        tx.objectStore(CONFIG_STORE).put({ key: CONFIG_KEY_HANDLE, handle });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = tx.onabort = () => resolve(false); // not fatal: the user can just pick the folder again next time
+      } catch (err) {
+        resolve(false);
+      }
+    })).catch(() => false);
+  }
+
+  function loadDirHandle() {
+    return getDB().then(db => new Promise((resolve) => {
+      try {
+        const request = db.transaction(CONFIG_STORE, 'readonly').objectStore(CONFIG_STORE).get(CONFIG_KEY_HANDLE);
+        request.onsuccess = () => resolve(request.result ? request.result.handle : null);
+        request.onerror = () => resolve(null);
+      } catch (err) {
+        resolve(null);
+      }
+    })).catch(() => null);
+  }
+
+  /** Loads whatever the base pool already has cached; called once on app startup, no folder access needed. */
+  function initPoolCards() {
+    return openDB()
+      .then(loadSavedPoolCards)
+      .then(cards => {
+        cards.forEach(card => {
+          if (!CARDS_DATA.some(c => c.id === card.id)) CARDS_DATA.push(card);
+        });
+        return cards;
+      })
+      .catch(() => []);
+  }
+
+  function isPoolUpdateSupported() {
+    return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
+  }
+
+  // ── Deterministic ids ─────────────────────────────────────────────────────────
+  // Pool card ids are derived from their path (e.g. "SET-1/Alazul_..."), not random,
+  // so the same file always gets the same id across scans, app restarts and saved decks.
+  function hashPath(text) {
+    // FNV-1a 32-bit: small, dependency-free, stable across sessions and browsers.
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  // Filename parsing reuses the TYPE_MAP / RARITY_MAP / ELEMENT_MAP / cleanCardName
+  // already defined above for the custom card importer (same documented format).
+
+  /**
+   * Parses one image's relative path (e.g. "SET-1/Nombre_Tipo_Rareza_Faccion_ATK_DEF_Coste.webp")
+   * into a pool card object. `catalogEntry`, when a matching row from catalogo-original.json
+   * exists for this path, is used only to fill in `description`/`flavor` with the real card
+   * text — it never overrides the type, rarity, element or stats the filename encodes, since
+   * that format is the one documented in cartas/README.md and covered by the app's tests.
+   */
+  function parsePoolCardFromPath(relPath, dataUrl, catalogEntry) {
+    const filename = relPath.split('/').pop();
+    const base = filename.substring(0, filename.lastIndexOf('.')) || filename;
+    const parts = base.split('_');
+    const firstPart = (parts[0] || '').toLowerCase().trim();
+    const id = 'pool_' + hashPath(relPath);
+
+    const common = { id, source: relPath, imageUrl: dataUrl, isPool: true };
+
+    if (firstPart === 'sello') {
+      const planetKey = parts.length > 2 ? parts[2].toLowerCase().trim() : (parts[1] || 'marte').toLowerCase().trim();
+      const element = ELEMENT_MAP[planetKey] || 'neutral';
+      const name = parts.length > 2 ? `Sello de ${cleanCardName(parts[1])}` : `Sello de ${cleanCardName(planetKey)}`;
+      return {
+        ...common,
+        name,
+        element,
+        type: 'Sello',
+        rarity: null,
+        cost: 0,
+        attack: null,
+        health: null,
+        description: (catalogEntry && catalogEntry.description) || `Sello elemental de ${element.toUpperCase()}. Genera 1 punto de maná de ${element.toUpperCase()}.`,
+        flavor: (catalogEntry && catalogEntry.lore) || `"La resonancia cósmica de ${element} fluye a través de este sello sagrado."`,
+        isSello: true
+      };
+    }
+
+    if (firstPart === 'token') {
+      const planetKey = parts.length > 2 ? parts[2].toLowerCase().trim() : (parts[1] || 'marte').toLowerCase().trim();
+      const element = ELEMENT_MAP[planetKey] || 'neutral';
+      const tokenName = parts.length > 2 ? cleanCardName(parts[1]) : `Token de ${cleanCardName(planetKey)}`;
+      return {
+        ...common,
+        name: tokenName,
+        element,
+        type: 'Token',
+        rarity: 'Common',
+        cost: 0,
+        attack: 1,
+        health: 1,
+        description: (catalogEntry && catalogEntry.description) || `Token de Facción (${element.toUpperCase()}). Se invoca automáticamente en el Mazo Extra cuando tu mazo contiene cartas de ${element.toUpperCase()}.`,
+        flavor: (catalogEntry && catalogEntry.lore) || `"Ficha elemental invocada por la presencia de ${element}."`,
+        isToken: true
+      };
+    }
+
+    const name = cleanCardName(parts[0] || 'Carta');
+    const rawType = (parts[1] || 'Criatura').toLowerCase().replace(/\s+/g, '').trim();
+    const rawRarity = (parts[2] || 'Comun').toLowerCase().trim();
+    const rawColor = (parts[3] || 'Neutral').toLowerCase().trim();
+    const rawAtk = parts[4];
+    const rawDef = parts[5];
+    const rawCost = parts[6] || parts[parts.length - 1];
+
+    const type = TYPE_MAP[rawType] || 'Criatura';
+    let rarity = RARITY_MAP[rawRarity] || 'Common';
+    const element = ELEMENT_MAP[rawColor] || 'neutral';
+    const isSello = type === 'Sello';
+    if (isSello) rarity = null;
+
+    let attack = null;
+    let health = null;
+    if (type === 'Criatura') {
+      const pAtk = parseInt(rawAtk, 10);
+      const pDef = parseInt(rawDef, 10);
+      attack = isNaN(pAtk) ? 1 : Math.max(0, pAtk);
+      health = isNaN(pDef) ? 1 : Math.max(1, pDef);
+    }
+
+    let cost = 0;
+    if (!isSello && rawCost !== undefined) {
+      const match = String(rawCost).match(/\d+/);
+      if (match) cost = parseInt(match[0], 10);
+    }
+
+    return {
+      ...common,
+      name: (catalogEntry && catalogEntry.name) || name,
+      element,
+      type,
+      rarity,
+      cost: Math.max(0, Math.min(20, cost)),
+      attack,
+      health,
+      description: (catalogEntry && catalogEntry.description) || `Carta de tipo ${type} alineada con el planeta ${element.toUpperCase()}.`,
+      flavor: (catalogEntry && catalogEntry.lore) || `"${name} se manifiesta desde los archivos de la pool base."`,
+      isToken: type === 'Token',
+      isSello
+    };
+  }
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reader.onabort = () => reject(new Error('No se pudo leer: ' + file.name));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /** Recursively walks a directory handle, yielding { relPath, fileHandle } for every image file. */
+  async function* walkImages(dirHandle, prefix = '') {
+    for await (const entry of dirHandle.values()) {
+      const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.kind === 'directory') {
+        yield* walkImages(entry, relPath);
+      } else if (entry.kind === 'file' && IMAGE_EXTENSIONS.test(entry.name)) {
+        yield { relPath, fileHandle: entry };
+      }
+    }
+  }
+
+  /** Best-effort read of catalogo-original.json at the folder root, keyed by its `archivo` field. */
+  async function readCatalog(dirHandle) {
+    try {
+      const fileHandle = await dirHandle.getFileHandle('catalogo-original.json');
+      const file = await fileHandle.getFile();
+      const parsed = JSON.parse(await file.text());
+      const list = Array.isArray(parsed) ? parsed : (parsed.cards || []);
+      const map = new Map();
+      for (const entry of list) {
+        if (entry && typeof entry.archivo === 'string') {
+          map.set(entry.archivo.replace(/\\\\/g, '/'), entry);
+        }
+      }
+      return map;
+    } catch (err) {
+      return new Map(); // optional file: filename-only parsing still works without it
+    }
+  }
+
+  async function ensurePermission(handle) {
+    const opts = { mode: 'read' };
+    if ((await handle.queryPermission(opts)) === 'granted') return true;
+    return (await handle.requestPermission(opts)) === 'granted';
+  }
+
+  /**
+   * Scans the linked `cartas` folder and adds any image not already in the pool.
+   * Must be called directly from a click handler the first time (showDirectoryPicker
+   * needs a user gesture); once a folder is linked, later calls only need read
+   * permission, which the browser may grant silently.
+   */
+  async function checkForPoolUpdates(onProgress) {
+    if (!isPoolUpdateSupported()) {
+      return { success: false, unsupported: true, reason: 'Tu navegador no admite esta función (probá con Chrome o Edge). Usá "Importar Cartas" para cargar la pool base a mano.' };
+    }
+
+    let dirHandle = await loadDirHandle();
+    try {
+      if (dirHandle) {
+        if (!(await ensurePermission(dirHandle))) {
+          dirHandle = null; // permission revoked: fall through to asking again below
+        }
+      }
+      if (!dirHandle) {
+        dirHandle = await window.showDirectoryPicker({ id: 'tcg-deckbuilder-cartas', mode: 'read' });
+        await saveDirHandle(dirHandle);
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return { success: false, cancelled: true };
+      return { success: false, reason: 'No se pudo acceder a la carpeta: ' + (err && err.message ? err.message : err) };
+    }
+
+    const known = new Set(CARDS_DATA.filter(c => c.isPool && c.source).map(c => c.source));
+    const catalog = await readCatalog(dirHandle);
+
+    const toImport = [];
+    const setsSeen = new Set();
+    try {
+      for await (const { relPath, fileHandle } of walkImages(dirHandle)) {
+        setsSeen.add(relPath.split('/')[0]);
+        if (!known.has(relPath)) toImport.push({ relPath, fileHandle });
+      }
+    } catch (err) {
+      return { success: false, reason: 'No se pudo leer el contenido de la carpeta: ' + (err && err.message ? err.message : err) };
+    }
+
+    if (toImport.length === 0) {
+      return { success: true, added: 0, sets: [...setsSeen].sort() };
+    }
+
+    const newSets = new Set();
+    for (let i = 0; i < toImport.length; i++) {
+      const { relPath, fileHandle } = toImport[i];
+      const file = await fileHandle.getFile();
+      const dataUrl = await readFileAsDataURL(file);
+      const card = parsePoolCardFromPath(relPath, dataUrl, catalog.get(relPath));
+      if (!CARDS_DATA.some(c => c.id === card.id)) {
+        await savePoolCardToDB(card);
+        CARDS_DATA.push(card);
+        newSets.add(relPath.split('/')[0]);
+      }
+      if (onProgress) onProgress(i + 1, toImport.length, card);
+    }
+
+    return { success: true, added: toImport.length, sets: [...newSets].sort() };
+  }
+
   function initBanlistModal() {
     const modal = document.getElementById('modal-banlist');
     const openBtn = document.getElementById('btn-banlist');
@@ -2855,6 +3228,9 @@ function initCardInspector() {
     // 1. Initialize IndexedDB and load saved custom cards
     await initIndexedDB();
 
+    // 1b. Load whatever base pool (cartas/SET-N) was already scanned in a previous visit
+    await initPoolCards();
+
     // 2. Load Active Deck State
     loadInitialState();
 
@@ -2869,6 +3245,7 @@ function initCardInspector() {
     initCardImporterModal();
     initBanlistModal();
     initSavedDecksModal();
+    initPoolUpdatesButton();
 
     // 4. Bind Subscriptions
     subscribeToDeck(() => {
