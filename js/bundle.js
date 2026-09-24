@@ -1052,8 +1052,7 @@ function escapeHtml(value) {
       deckCount = 0,
       isMaxInDeck = false,
       isHandItem = false,
-      draggable = true,
-      deckTarget = 'main' // 'main' | 'side' — which deck this item belongs to, used by the move button
+      draggable = true
     } = options;
 
     const wrapper = document.createElement('div');
@@ -1083,25 +1082,11 @@ function escapeHtml(value) {
     }
 
     let deckQtyBadgeHtml = '';
-    let deckOverlayHtml = '';
     if (isDeckItem) {
       const atSharedMax = !isSello && combined >= maxCopies;
       deckQtyBadgeHtml = `
         <div class="deck-card-qty-badge ${atSharedMax ? 'is-max' : ''}">
           x${deckCount}
-        </div>
-      `;
-
-      const moveLabel = deckTarget === 'side' ? '⇤ 1 copia al Mazo' : '1 copia al Side ⇥';
-      const moveTitle = deckTarget === 'side' ? 'Mover 1 copia al Mazo Principal' : 'Mover 1 copia al Side Deck';
-      deckOverlayHtml = `
-        <div class="deck-card-actions-overlay">
-          <div class="deck-action-row">
-            <button class="btn-card-ctrl btn-remove" data-action="decrement" title="Quitar 1 copia">-</button>
-            <button class="btn-card-ctrl btn-add" data-action="increment" title="Agregar otra copia" ${atSharedMax ? 'disabled' : ''}>+</button>
-          </div>
-          <button class="btn-card-inspect" data-action="inspect" title="Ver detalles en grande">🔍 Inspeccionar</button>
-          <button class="btn-card-inspect btn-card-move" data-action="move" title="${moveTitle}">${moveLabel}</button>
         </div>
       `;
     }
@@ -1123,7 +1108,6 @@ function escapeHtml(value) {
         ${inDeckBadgeHtml}
         ${banlistBadgeHtml}
         ${deckQtyBadgeHtml}
-        ${deckOverlayHtml}
         ${isHandItem ? '<div class="mulligan-tag">DESCARTAR</div>' : ''}
       </div>
     `;
@@ -1408,44 +1392,24 @@ function initCardInspector() {
   function setupDeckGridInteractions(gridEl, target) {
     if (!gridEl) return;
 
+    // Left click on a card: inspect it
     gridEl.addEventListener('click', (e) => {
-      const btn = e.target.closest('button');
       const cardWrapper = e.target.closest('.tcg-card-wrapper');
       if (!cardWrapper) return;
-
       const cardId = cardWrapper.dataset.cardId;
       if (!cardId) return;
+      openCardInspector(cardId);
+    });
 
-      if (btn) {
-        const action = btn.dataset.action;
-        if (action === 'increment') {
-          e.stopPropagation();
-          const res = addCardToDeck(cardId, target);
-          if (res.success) {
-            if (target === 'main') document.getElementById('deck-name-input').value = state.deckName;
-            playCardDrop();
-          } else {
-            showToast(res.reason, 'warning');
-          }
-        } else if (action === 'decrement') {
-          e.stopPropagation();
-          removeCardFromDeck(cardId, false, target);
-          playCardRemove();
-        } else if (action === 'inspect') {
-          e.stopPropagation();
-          openCardInspector(cardId);
-        } else if (action === 'move') {
-          e.stopPropagation();
-          const result = moveCardBetweenDecks(cardId, target);
-          if (result.success) {
-            playCardDrop();
-          } else {
-            showToast(result.reason, 'warning');
-          }
-        }
-      } else {
-        openCardInspector(cardId);
-      }
+    // Right click on a card: remove 1 copy from this deck
+    gridEl.addEventListener('contextmenu', (e) => {
+      const cardWrapper = e.target.closest('.tcg-card-wrapper');
+      if (!cardWrapper) return;
+      e.preventDefault();
+      const cardId = cardWrapper.dataset.cardId;
+      if (!cardId) return;
+      removeCardFromDeck(cardId, false, target);
+      playCardRemove();
     });
 
     gridEl.addEventListener('dblclick', (e) => {
@@ -1492,7 +1456,7 @@ function initCardInspector() {
     }
   }
 
-  function renderDeckGrid(gridEl, deckArr, emptyStateEl, target = 'main') {
+  function renderDeckGrid(gridEl, deckArr, emptyStateEl) {
     if (!gridEl) return;
     if (deckArr.length === 0) {
       gridEl.innerHTML = '';
@@ -1508,8 +1472,7 @@ function initCardInspector() {
         const cardElem = createCardElement(card, {
           isDeckItem: true,
           deckCount: item.count,
-          draggable: true,
-          deckTarget: target
+          draggable: true
         });
         cardElem.dataset.deckIndex = index;
         gridEl.appendChild(cardElem);
@@ -1530,7 +1493,7 @@ function initCardInspector() {
       sideCountPill.classList.toggle('is-valid', sideTotal === state.maxSideDeckSize);
     }
 
-    renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState, 'side');
+    renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState);
   }
 
   function renderDeck() {
@@ -1567,7 +1530,7 @@ function initCardInspector() {
       }
     }
 
-    renderDeckGrid(deckGrid, state.deck, emptyState, 'main');
+    renderDeckGrid(deckGrid, state.deck, emptyState);
 
     renderSideDeck();
 

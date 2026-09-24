@@ -498,24 +498,6 @@
   .extra-deck-desc { display: none; }
 }
 
-/* The inspect button is hidden below "lg": clicking the card inspects it anyway */
-.deck-grid[data-card-size="md"] .deck-card-actions-overlay { gap: 5px; padding: 6px; }
-.deck-grid[data-card-size="md"] .deck-action-row { gap: 6px; }
-.deck-grid[data-card-size="md"] .btn-card-ctrl { width: 26px; height: 26px; font-size: 14px; }
-.deck-grid[data-card-size="md"] .btn-card-inspect { display: none; }
-.deck-grid[data-card-size="md"] .btn-card-move { display: none; }
 .deck-grid[data-card-size="md"] .deck-card-qty-badge { font-size: 10px; padding: 1px 6px; top: 4px; right: 4px; }
-
-.deck-grid[data-card-size="sm"] .deck-card-actions-overlay { padding: 4px; }
-.deck-grid[data-card-size="sm"] .deck-action-row { gap: 4px; }
-.deck-grid[data-card-size="sm"] .btn-card-ctrl { width: 22px; height: 22px; font-size: 13px; }
-.deck-grid[data-card-size="sm"] .btn-card-inspect { display: none; }
-.deck-grid[data-card-size="sm"] .btn-card-move { display: none; }
 .deck-grid[data-card-size="sm"] .deck-card-qty-badge { font-size: 9px; padding: 1px 5px; top: 3px; right: 3px; }
-
-.deck-grid[data-card-size="xs"] .deck-card-actions-overlay { padding: 2px; }
-.deck-grid[data-card-size="xs"] .deck-action-row { gap: 3px; }
-.deck-grid[data-card-size="xs"] .btn-card-ctrl { width: 18px; height: 18px; font-size: 11px; }
-.deck-grid[data-card-size="xs"] .btn-card-inspect { display: none; }
-.deck-grid[data-card-size="xs"] .btn-card-move { display: none; }
 .deck-grid[data-card-size="xs"] .deck-card-qty-badge { font-size: 8px; padding: 0 4px; top: 2px; right: 2px; }

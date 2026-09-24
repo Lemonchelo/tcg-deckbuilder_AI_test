@@ -15,8 +15,7 @@ export function createCardElement(card, options = {}) {
     deckCount = 0,
     isMaxInDeck = false,
     isHandItem = false,
-    draggable = true,
-    deckTarget = 'main' // 'main' | 'side' — which deck this item belongs to, used by the move button
+    draggable = true
   } = options;
 
   const wrapper = document.createElement('div');
@@ -46,25 +45,11 @@ export function createCardElement(card, options = {}) {
   }
 
   let deckQtyBadgeHtml = '';
-  let deckOverlayHtml = '';
   if (isDeckItem) {
     const atSharedMax = !isSello && combined >= maxCopies;
     deckQtyBadgeHtml = `
       <div class="deck-card-qty-badge ${atSharedMax ? 'is-max' : ''}">
         x${deckCount}
-      </div>
-    `;
-
-    const moveLabel = deckTarget === 'side' ? '⇤ 1 copia al Mazo' : '1 copia al Side ⇥';
-    const moveTitle = deckTarget === 'side' ? 'Mover 1 copia al Mazo Principal' : 'Mover 1 copia al Side Deck';
-    deckOverlayHtml = `
-      <div class="deck-card-actions-overlay">
-        <div class="deck-action-row">
-          <button class="btn-card-ctrl btn-remove" data-action="decrement" title="Quitar 1 copia">-</button>
-          <button class="btn-card-ctrl btn-add" data-action="increment" title="Agregar otra copia" ${atSharedMax ? 'disabled' : ''}>+</button>
-        </div>
-        <button class="btn-card-inspect" data-action="inspect" title="Ver detalles en grande">🔍 Inspeccionar</button>
-        <button class="btn-card-inspect btn-card-move" data-action="move" title="${moveTitle}">${moveLabel}</button>
       </div>
     `;
   }
@@ -93,7 +78,6 @@ export function createCardElement(card, options = {}) {
       ${inDeckBadgeHtml}
       ${banlistBadgeHtml}
       ${deckQtyBadgeHtml}
-      ${deckOverlayHtml}
       
       <!-- Mulligan Tag if in test hand -->
       ${isHandItem ? '<div class="mulligan-tag">DESCARTAR</div>' : ''}

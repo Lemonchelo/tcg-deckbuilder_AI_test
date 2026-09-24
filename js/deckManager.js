@@ -4,12 +4,11 @@
  * and Automated Extra Deck (Tokens).
  */
 
-import { state, addCardToDeck, removeCardFromDeck, moveCardBetweenDecks, getDeckTotalCount, setDeckName, getActiveExtraDeckTokens } from './state.js';
+import { state, removeCardFromDeck, getDeckTotalCount, setDeckName, getActiveExtraDeckTokens } from './state.js';
 import { getCardById, ELEMENTS } from './cardsData.js';
 import { createCardElement, openCardInspector } from './cardInspector.js';
 import { renderManaCurve } from './manaCurve.js';
-import { playCardDrop, playCardRemove } from './sound.js';
-import { showToast } from './app.js';
+import { playCardRemove } from './sound.js';
 
 export function initDeckView() {
   const deckGrid = document.getElementById('deck-grid');
@@ -49,43 +48,24 @@ export function initDeckView() {
 function setupDeckGridInteractions(gridEl, target) {
   if (!gridEl) return;
 
+  // Left click on a card: inspect it
   gridEl.addEventListener('click', (e) => {
-    const btn = e.target.closest('button');
     const cardWrapper = e.target.closest('.tcg-card-wrapper');
     if (!cardWrapper) return;
-
     const cardId = cardWrapper.dataset.cardId;
     if (!cardId) return;
+    openCardInspector(cardId);
+  });
 
-    if (btn) {
-      const action = btn.dataset.action;
-      if (action === 'increment') {
-        e.stopPropagation();
-        const res = addCardToDeck(cardId, target);
-        if (res.success) {
-          playCardDrop();
-        } else {
-          showToast(res.reason, 'warning');
-        }
-      } else if (action === 'decrement') {
-        e.stopPropagation();
-        removeCardFromDeck(cardId, false, target);
-        playCardRemove();
-      } else if (action === 'inspect') {
-        e.stopPropagation();
-        openCardInspector(cardId);
-      } else if (action === 'move') {
-        e.stopPropagation();
-        const result = moveCardBetweenDecks(cardId, target);
-        if (result.success) {
-          playCardDrop();
-        } else {
-          showToast(result.reason, 'warning');
-        }
-      }
-    } else {
-      openCardInspector(cardId);
-    }
+  // Right click on a card: remove 1 copy from this deck
+  gridEl.addEventListener('contextmenu', (e) => {
+    const cardWrapper = e.target.closest('.tcg-card-wrapper');
+    if (!cardWrapper) return;
+    e.preventDefault();
+    const cardId = cardWrapper.dataset.cardId;
+    if (!cardId) return;
+    removeCardFromDeck(cardId, false, target);
+    playCardRemove();
   });
 
   gridEl.addEventListener('dblclick', (e) => {
@@ -131,7 +111,7 @@ export function renderDeck() {
   }
 
   // 2. Render Main Deck Grid
-  renderDeckGrid(deckGrid, state.deck, emptyState, 'main');
+  renderDeckGrid(deckGrid, state.deck, emptyState);
 
   // 3. Render Side Deck
   renderSideDeck();
@@ -171,7 +151,7 @@ export function renderDeck() {
   fitDeckLayout();
 }
 
-function renderDeckGrid(gridEl, deckArr, emptyStateEl, target = 'main') {
+function renderDeckGrid(gridEl, deckArr, emptyStateEl) {
   if (!gridEl) return;
   if (deckArr.length === 0) {
     gridEl.innerHTML = '';
@@ -187,8 +167,7 @@ function renderDeckGrid(gridEl, deckArr, emptyStateEl, target = 'main') {
       const cardElem = createCardElement(card, {
         isDeckItem: true,
         deckCount: item.count,
-        draggable: true,
-        deckTarget: target
+        draggable: true
       });
       cardElem.dataset.deckIndex = index;
       gridEl.appendChild(cardElem);
@@ -210,7 +189,7 @@ function renderSideDeck() {
   }
 
   if (!sideDeckGrid) return;
-  renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState, 'side');
+  renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState);
 }
 
 // ── Fit-to-window layout ─────────────────────────────────────────────────────
