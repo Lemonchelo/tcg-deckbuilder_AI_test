@@ -4,7 +4,7 @@
  */
 
 import { CARDS_DATA } from './cardsData.js';
-import { state, setCardScale, setFilter, resetFilters, addCardToDeck, canAddCardToDeck, getCombinedCardCount, getMaxAllowedCopies, isCardBanlisted } from './state.js';
+import { state, setCardScale, setFilter, resetFilters, addCardToDeck, canAddCardToDeck, getCombinedCardCount, getMaxAllowedCopies, isCardBanlisted, getDeckTotalCount } from './state.js';
 import { createCardElement, openCardInspector } from './cardInspector.js';
 import { playClick, playCardDrop } from './sound.js';
 import { showToast } from './app.js';
@@ -148,12 +148,15 @@ export function initFilters() {
       const cardId = cardWrapper.dataset.cardId;
       if (!cardId) return;
 
-      const check = canAddCardToDeck(cardId);
+      // If the Main Deck is already full, a right-click adds the card to the Side Deck instead
+      const target = getDeckTotalCount('main') >= state.maxDeckSize ? 'side' : 'main';
+
+      const check = canAddCardToDeck(cardId, target);
       if (check.allowed) {
-        addCardToDeck(cardId);
+        addCardToDeck(cardId, target);
         playCardDrop();
         const card = CARDS_DATA.find(c => c.id === cardId);
-        showToast(`Agregado: ${card ? card.name : 'Carta'} al mazo`, 'success');
+        showToast(`Agregado: ${card ? card.name : 'Carta'} al ${target === 'side' ? 'Side Deck' : 'mazo'}`, 'success');
       } else {
         showToast(check.reason, 'warning');
       }

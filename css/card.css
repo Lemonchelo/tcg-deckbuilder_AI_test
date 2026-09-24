@@ -233,6 +233,16 @@
   background: rgba(255, 255, 255, 0.25);
 }
 
+.btn-card-move {
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #7dd3fc;
+}
+
+.btn-card-move:hover {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8;
+}
+
 /* Library Card In-Deck Indicator */
 .library-card-in-deck-badge {
   position: absolute;

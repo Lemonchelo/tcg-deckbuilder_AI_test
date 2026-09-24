@@ -656,6 +656,49 @@ function escapeHtml(value) {
     notifyDeckChanged();
   }
 
+  // Moves a single copy of a card from one deck to the other (Main <-> Side),
+  // one copy at a time for comfort when adjusting the split. The combined copy
+  // count across Main + Side stays the same, so the per-card rarity/banlist
+  // limit is never affected by a move — only the destination deck's own size
+  // limit (40 for Main, 15 for Side) can block it.
+  function moveCardBetweenDecks(cardId, fromTarget) {
+    const toTarget = fromTarget === 'side' ? 'main' : 'side';
+    const fromArr = deckArrayFor(fromTarget);
+    const fromIndex = fromArr.findIndex(item => item.cardId === cardId);
+    if (fromIndex === -1) {
+      return { success: false, reason: 'Esa carta no está en ese mazo.' };
+    }
+
+    const toArr = deckArrayFor(toTarget);
+    const toSizeLimit = toTarget === 'side' ? state.maxSideDeckSize : state.maxDeckSize;
+    const toCurrentTotal = getDeckTotalCount(toTarget);
+
+    if (toCurrentTotal + 1 > toSizeLimit) {
+      return {
+        success: false,
+        reason: toTarget === 'side'
+          ? `El Side Deck ya tiene ${toSizeLimit} cartas (tamaño máximo).`
+          : `El Mazo Principal ya tiene ${toSizeLimit} cartas (tamaño máximo).`
+      };
+    }
+
+    if (fromArr[fromIndex].count <= 1) {
+      fromArr.splice(fromIndex, 1);
+    } else {
+      fromArr[fromIndex].count -= 1;
+    }
+
+    const toExistingIndex = toArr.findIndex(item => item.cardId === cardId);
+    if (toExistingIndex !== -1) {
+      toArr[toExistingIndex].count += 1;
+    } else {
+      toArr.push({ cardId, count: 1 });
+    }
+
+    notifyDeckChanged();
+    return { success: true, moved: 1, to: toTarget };
+  }
+
   function reorderDeck(fromIndex, toIndex, target = 'main') {
     const deckArr = deckArrayFor(target);
     if (fromIndex < 0 || fromIndex >= deckArr.length || toIndex < 0 || toIndex >= deckArr.length) return;
@@ -1009,7 +1052,8 @@ function escapeHtml(value) {
       deckCount = 0,
       isMaxInDeck = false,
       isHandItem = false,
-      draggable = true
+      draggable = true,
+      deckTarget = 'main' // 'main' | 'side' — which deck this item belongs to, used by the move button
     } = options;
 
     const wrapper = document.createElement('div');
@@ -1048,6 +1092,8 @@ function escapeHtml(value) {
         </div>
       `;
 
+      const moveLabel = deckTarget === 'side' ? '⇤ 1 copia al Mazo' : '1 copia al Side ⇥';
+      const moveTitle = deckTarget === 'side' ? 'Mover 1 copia al Mazo Principal' : 'Mover 1 copia al Side Deck';
       deckOverlayHtml = `
         <div class="deck-card-actions-overlay">
           <div class="deck-action-row">
@@ -1055,6 +1101,7 @@ function escapeHtml(value) {
             <button class="btn-card-ctrl btn-add" data-action="increment" title="Agregar otra copia" ${atSharedMax ? 'disabled' : ''}>+</button>
           </div>
           <button class="btn-card-inspect" data-action="inspect" title="Ver detalles en grande">🔍 Inspeccionar</button>
+          <button class="btn-card-inspect btn-card-move" data-action="move" title="${moveTitle}">${moveLabel}</button>
         </div>
       `;
     }
@@ -1387,6 +1434,14 @@ function initCardInspector() {
         } else if (action === 'inspect') {
           e.stopPropagation();
           openCardInspector(cardId);
+        } else if (action === 'move') {
+          e.stopPropagation();
+          const result = moveCardBetweenDecks(cardId, target);
+          if (result.success) {
+            playCardDrop();
+          } else {
+            showToast(result.reason, 'warning');
+          }
         }
       } else {
         openCardInspector(cardId);
@@ -1437,7 +1492,7 @@ function initCardInspector() {
     }
   }
 
-  function renderDeckGrid(gridEl, deckArr, emptyStateEl) {
+  function renderDeckGrid(gridEl, deckArr, emptyStateEl, target = 'main') {
     if (!gridEl) return;
     if (deckArr.length === 0) {
       gridEl.innerHTML = '';
@@ -1453,7 +1508,8 @@ function initCardInspector() {
         const cardElem = createCardElement(card, {
           isDeckItem: true,
           deckCount: item.count,
-          draggable: true
+          draggable: true,
+          deckTarget: target
         });
         cardElem.dataset.deckIndex = index;
         gridEl.appendChild(cardElem);
@@ -1474,7 +1530,7 @@ function initCardInspector() {
       sideCountPill.classList.toggle('is-valid', sideTotal === state.maxSideDeckSize);
     }
 
-    renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState);
+    renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState, 'side');
   }
 
   function renderDeck() {
@@ -1511,7 +1567,7 @@ function initCardInspector() {
       }
     }
 
-    renderDeckGrid(deckGrid, state.deck, emptyState);
+    renderDeckGrid(deckGrid, state.deck, emptyState, 'main');
 
     renderSideDeck();
 
@@ -1796,12 +1852,15 @@ function initCardInspector() {
         const cardId = cardWrapper.dataset.cardId;
         if (!cardId) return;
 
-        const check = canAddCardToDeck(cardId, 'main');
+        // If the Main Deck is already full, a right-click adds the card to the Side Deck instead
+        const target = getDeckTotalCount('main') >= state.maxDeckSize ? 'side' : 'main';
+
+        const check = canAddCardToDeck(cardId, target);
         if (check.allowed) {
-          addCardToDeck(cardId, 'main');
+          addCardToDeck(cardId, target);
           playCardDrop();
           const card = CARDS_DATA.find(c => c.id === cardId);
-          showToast(`Agregado: ${card ? card.name : 'Carta'} al mazo`, 'success');
+          showToast(`Agregado: ${card ? card.name : 'Carta'} al ${target === 'side' ? 'Side Deck' : 'mazo'}`, 'success');
         } else {
           showToast(check.reason, 'warning');
         }
@@ -2008,6 +2067,16 @@ function initCardInspector() {
             reorderDeck(payload.index, targetIndex, target);
             playCardDrop();
           }
+        }
+      } else if (payload.source === 'main' || payload.source === 'side') {
+        // Dropped a Main Deck card onto the Side Deck, or vice versa: move 1 copy across
+        const result = moveCardBetweenDecks(payload.cardId, payload.source);
+        const card = getCardById(payload.cardId);
+        if (result.success) {
+          playCardDrop();
+          showToast(`Movida 1 copia de ${card ? card.name : 'la carta'} al ${target === 'side' ? 'Side Deck' : 'Mazo Principal'}`, 'success');
+        } else {
+          showToast(result.reason, 'warning');
         }
       }
     });

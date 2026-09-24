@@ -307,6 +307,51 @@ export function removeCardFromDeck(cardId, removeAll = false, target = 'main') {
   notifyDeckChanged();
 }
 
+/**
+ * Moves a single copy of a card from one deck to the other (Main <-> Side),
+ * one copy at a time for comfort when adjusting the split. The combined copy
+ * count across Main + Side stays the same, so the per-card rarity/banlist
+ * limit is never affected by a move — only the destination deck's own size
+ * limit (40 for Main, 15 for Side) can block it.
+ */
+export function moveCardBetweenDecks(cardId, fromTarget) {
+  const toTarget = fromTarget === 'side' ? 'main' : 'side';
+  const fromArr = deckArrayFor(fromTarget);
+  const fromIndex = fromArr.findIndex(item => item.cardId === cardId);
+  if (fromIndex === -1) {
+    return { success: false, reason: 'Esa carta no está en ese mazo.' };
+  }
+
+  const toArr = deckArrayFor(toTarget);
+  const toSizeLimit = toTarget === 'side' ? state.maxSideDeckSize : state.maxDeckSize;
+  const toCurrentTotal = getDeckTotalCount(toTarget);
+
+  if (toCurrentTotal + 1 > toSizeLimit) {
+    return {
+      success: false,
+      reason: toTarget === 'side'
+        ? `El Side Deck ya tiene ${toSizeLimit} cartas (tamaño máximo).`
+        : `El Mazo Principal ya tiene ${toSizeLimit} cartas (tamaño máximo).`
+    };
+  }
+
+  if (fromArr[fromIndex].count <= 1) {
+    fromArr.splice(fromIndex, 1);
+  } else {
+    fromArr[fromIndex].count -= 1;
+  }
+
+  const toExistingIndex = toArr.findIndex(item => item.cardId === cardId);
+  if (toExistingIndex !== -1) {
+    toArr[toExistingIndex].count += 1;
+  } else {
+    toArr.push({ cardId, count: 1 });
+  }
+
+  notifyDeckChanged();
+  return { success: true, moved: 1, to: toTarget };
+}
+
 export function reorderDeck(fromIndex, toIndex, target = 'main') {
   const deckArr = deckArrayFor(target);
   if (fromIndex < 0 || fromIndex >= deckArr.length || toIndex < 0 || toIndex >= deckArr.length) return;

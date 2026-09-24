@@ -40,24 +40,6 @@
           <input type="text" id="deck-name-input" class="deck-name-input" value="Mazo Planetario de Batalla" title="Haz clic para renombrar el mazo" maxlength="32">
           <span class="edit-icon">✎</span>
         </div>
-        <!-- Main Deck 40-Card Counter -->
-        <div class="deck-count-pill" id="deck-count-pill" title="El mazo principal debe contener exactamente 40 cartas">
-          <span class="count-label">Mazo:</span>
-          <span class="count-value" id="deck-total-count">0</span>
-          <span class="count-target">/ 40</span>
-        </div>
-        <!-- Side Deck Counter -->
-        <div class="deck-count-pill side-deck-count-pill" id="side-deck-count-pill" title="El Side Deck admite hasta 15 cartas y comparte el límite de copias con el Mazo Principal">
-          <span class="count-label">Side:</span>
-          <span class="count-value" id="side-deck-total-count">0</span>
-          <span class="count-target">/ 15</span>
-        </div>
-        <!-- Extra Deck (Token) Counter -->
-        <div class="extra-tokens-pill" id="extra-tokens-pill" title="Tokens generados automáticamente según las facciones activas en tu mazo">
-          <span class="count-label">Mazo Extra:</span>
-          <span class="extra-token-val" id="extra-tokens-count">0</span>
-          <span class="extra-token-badge">Tokens</span>
-        </div>
         <!-- Status Badge -->
         <div class="deck-status-badge is-incomplete" id="deck-status-badge">
           Incompleto
@@ -147,7 +129,15 @@
           <div class="deck-main-section">
             <div class="deck-sub-header">
               <span class="sub-title">🎴 Mazo Principal (40 cartas)</span>
-              <span class="sub-tip">Límites: 4 Comunes, 3 Raras, 2 Épicas, 1 Legendaria</span>
+              <div class="deck-sub-header-right">
+                <span class="sub-tip">Límites: 4 Comunes, 3 Raras, 2 Épicas, 1 Legendaria</span>
+                <!-- Main Deck 40-Card Counter -->
+                <div class="deck-count-pill" id="deck-count-pill" title="El mazo principal debe contener exactamente 40 cartas">
+                  <span class="count-label">Mazo:</span>
+                  <span class="count-value" id="deck-total-count">0</span>
+                  <span class="count-target">/ 40</span>
+                </div>
+              </div>
             </div>
 
             <div class="deck-dropzone-container" id="deck-dropzone">
@@ -180,7 +170,15 @@
           <div class="side-deck-section" id="side-deck-panel">
             <div class="deck-sub-header">
               <span class="sub-title">🗂️ Side Deck (15 cartas)</span>
-              <span class="sub-tip">Comparte el límite de copias con el Mazo Principal</span>
+              <div class="deck-sub-header-right">
+                <span class="sub-tip">Comparte el límite de copias con el Mazo Principal</span>
+                <!-- Side Deck Counter -->
+                <div class="deck-count-pill side-deck-count-pill" id="side-deck-count-pill" title="El Side Deck admite hasta 15 cartas y comparte el límite de copias con el Mazo Principal">
+                  <span class="count-label">Side:</span>
+                  <span class="count-value" id="side-deck-total-count">0</span>
+                  <span class="count-target">/ 15</span>
+                </div>
+              </div>
             </div>
 
             <div class="deck-dropzone-container side-deck-dropzone-container" id="side-deck-dropzone">
@@ -213,7 +211,15 @@
                 <span class="extra-deck-title">⚡ Mazo Extra (Tokens)</span>
                 <span class="extra-auto-badge">Automático</span>
               </div>
-              <span class="extra-deck-desc">Se agregan y remueven automáticamente según las facciones presentes en tu mazo principal.</span>
+              <div class="extra-deck-header-right">
+                <span class="extra-deck-desc">Se agregan y remueven automáticamente según las facciones presentes en tu mazo principal.</span>
+                <!-- Extra Deck (Token) Counter -->
+                <div class="extra-tokens-pill" id="extra-tokens-pill" title="Tokens generados automáticamente según las facciones activas en tu mazo">
+                  <span class="count-label">Mazo Extra:</span>
+                  <span class="extra-token-val" id="extra-tokens-count">0</span>
+                  <span class="extra-token-badge">Tokens</span>
+                </div>
+              </div>
             </div>
 
             <div class="extra-deck-body">

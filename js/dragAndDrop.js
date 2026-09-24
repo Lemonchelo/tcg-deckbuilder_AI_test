@@ -5,7 +5,7 @@
  * (no separate trash bar is needed).
  */
 
-import { addCardToDeck, removeCardFromDeck, reorderDeck, canAddCardToDeck } from './state.js';
+import { addCardToDeck, removeCardFromDeck, reorderDeck, canAddCardToDeck, moveCardBetweenDecks } from './state.js';
 import { playCardPickup, playCardDrop, playCardRemove } from './sound.js';
 import { showToast } from './app.js';
 import { getCardById } from './cardsData.js';
@@ -71,6 +71,16 @@ function setupDeckDropzone(dropzoneEl, gridSelector, target) {
           reorderDeck(payload.index, targetIndex, target);
           playCardDrop();
         }
+      }
+    } else if (payload.source === 'main' || payload.source === 'side') {
+      // Dropped a Main Deck card onto the Side Deck, or vice versa: move 1 copy across
+      const result = moveCardBetweenDecks(payload.cardId, payload.source);
+      const card = getCardById(payload.cardId);
+      if (result.success) {
+        playCardDrop();
+        showToast(`Movida 1 copia de ${card ? card.name : 'la carta'} al ${target === 'side' ? 'Side Deck' : 'Mazo Principal'}`, 'success');
+      } else {
+        showToast(result.reason, 'warning');
       }
     }
   });

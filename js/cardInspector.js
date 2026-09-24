@@ -15,7 +15,8 @@ export function createCardElement(card, options = {}) {
     deckCount = 0,
     isMaxInDeck = false,
     isHandItem = false,
-    draggable = true
+    draggable = true,
+    deckTarget = 'main' // 'main' | 'side' — which deck this item belongs to, used by the move button
   } = options;
 
   const wrapper = document.createElement('div');
@@ -54,6 +55,8 @@ export function createCardElement(card, options = {}) {
       </div>
     `;
 
+    const moveLabel = deckTarget === 'side' ? '⇤ 1 copia al Mazo' : '1 copia al Side ⇥';
+    const moveTitle = deckTarget === 'side' ? 'Mover 1 copia al Mazo Principal' : 'Mover 1 copia al Side Deck';
     deckOverlayHtml = `
       <div class="deck-card-actions-overlay">
         <div class="deck-action-row">
@@ -61,6 +64,7 @@ export function createCardElement(card, options = {}) {
           <button class="btn-card-ctrl btn-add" data-action="increment" title="Agregar otra copia" ${atSharedMax ? 'disabled' : ''}>+</button>
         </div>
         <button class="btn-card-inspect" data-action="inspect" title="Ver detalles en grande">🔍 Inspeccionar</button>
+        <button class="btn-card-inspect btn-card-move" data-action="move" title="${moveTitle}">${moveLabel}</button>
       </div>
     `;
   }

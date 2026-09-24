@@ -4,7 +4,7 @@
  * and Automated Extra Deck (Tokens).
  */
 
-import { state, addCardToDeck, removeCardFromDeck, getDeckTotalCount, setDeckName, getActiveExtraDeckTokens } from './state.js';
+import { state, addCardToDeck, removeCardFromDeck, moveCardBetweenDecks, getDeckTotalCount, setDeckName, getActiveExtraDeckTokens } from './state.js';
 import { getCardById, ELEMENTS } from './cardsData.js';
 import { createCardElement, openCardInspector } from './cardInspector.js';
 import { renderManaCurve } from './manaCurve.js';
@@ -74,6 +74,14 @@ function setupDeckGridInteractions(gridEl, target) {
       } else if (action === 'inspect') {
         e.stopPropagation();
         openCardInspector(cardId);
+      } else if (action === 'move') {
+        e.stopPropagation();
+        const result = moveCardBetweenDecks(cardId, target);
+        if (result.success) {
+          playCardDrop();
+        } else {
+          showToast(result.reason, 'warning');
+        }
       }
     } else {
       openCardInspector(cardId);
@@ -123,7 +131,7 @@ export function renderDeck() {
   }
 
   // 2. Render Main Deck Grid
-  renderDeckGrid(deckGrid, state.deck, emptyState);
+  renderDeckGrid(deckGrid, state.deck, emptyState, 'main');
 
   // 3. Render Side Deck
   renderSideDeck();
@@ -163,7 +171,7 @@ export function renderDeck() {
   fitDeckLayout();
 }
 
-function renderDeckGrid(gridEl, deckArr, emptyStateEl) {
+function renderDeckGrid(gridEl, deckArr, emptyStateEl, target = 'main') {
   if (!gridEl) return;
   if (deckArr.length === 0) {
     gridEl.innerHTML = '';
@@ -179,7 +187,8 @@ function renderDeckGrid(gridEl, deckArr, emptyStateEl) {
       const cardElem = createCardElement(card, {
         isDeckItem: true,
         deckCount: item.count,
-        draggable: true
+        draggable: true,
+        deckTarget: target
       });
       cardElem.dataset.deckIndex = index;
       gridEl.appendChild(cardElem);
@@ -201,7 +210,7 @@ function renderSideDeck() {
   }
 
   if (!sideDeckGrid) return;
-  renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState);
+  renderDeckGrid(sideDeckGrid, state.sideDeck, sideEmptyState, 'side');
 }
 
 // ── Fit-to-window layout ─────────────────────────────────────────────────────
