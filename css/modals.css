@@ -271,6 +271,40 @@
   margin-top: 4px;
 }
 
+.inspector-target-toggle {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.target-toggle-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-dim);
+  color: var(--text-secondary);
+  font-family: var(--font-hud);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 7px 10px;
+  clip-path: var(--clip-bevel-sm);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.target-toggle-btn:hover {
+  color: var(--text-primary);
+  background: rgba(0, 245, 255, 0.05);
+}
+
+.target-toggle-btn.active {
+  color: var(--cyan);
+  background: rgba(0, 245, 255, 0.1);
+  border-color: var(--border-soft);
+  text-shadow: 0 0 8px var(--cyan-glow-sm);
+}
+
 /* ==========================================================================
    TEST HAND SIMULATOR MODAL
    ========================================================================== */

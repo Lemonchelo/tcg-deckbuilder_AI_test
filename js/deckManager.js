@@ -54,7 +54,7 @@ function setupDeckGridInteractions(gridEl, target) {
     if (!cardWrapper) return;
     const cardId = cardWrapper.dataset.cardId;
     if (!cardId) return;
-    openCardInspector(cardId);
+    openCardInspector(cardId, { target });
   });
 
   // Right click on a card: remove 1 copy from this deck

@@ -3,8 +3,8 @@
  */
 
 import { getCardById, ELEMENTS, escapeHtml, renderElementIcon } from './cardsData.js';
-import { addCardToDeck, canAddCardToDeck, getCardCountInDeck, getCombinedCardCount, getMaxAllowedCopies, getBanlistLimit, isCardBanlisted } from './state.js';
-import { playClick, playCardDrop } from './sound.js';
+import { state, addCardToDeck, removeCardFromDeck, canAddCardToDeck, getCardCountInDeck, getCombinedCardCount, getMaxAllowedCopies, getDeckTotalCount, getBanlistLimit, isCardBanlisted } from './state.js';
+import { playClick, playCardDrop, playCardRemove } from './sound.js';
 
 /**
  * Generate standard HTML for a Full TCG Card
@@ -122,7 +122,8 @@ export function attach3DTiltEffect(wrapper) {
 /**
  * Open Card Inspector Modal (Full 3D HD View, enlarged)
  */
-export function openCardInspector(cardId) {
+export function openCardInspector(cardId, options = {}) {
+  const { target = 'main' } = options;
   const card = getCardById(cardId);
   if (!card) return;
 
@@ -134,9 +135,11 @@ export function openCardInspector(cardId) {
 
   const elementInfo = ELEMENTS[card.element] || ELEMENTS.neutral;
   const currentInMain = getCardCountInDeck(card.id, 'main');
+  const currentInSide = getCardCountInDeck(card.id, 'side');
   const currentCombined = getCombinedCardCount(card.id);
   const maxCopies = getMaxAllowedCopies(card.id);
   const isSello = card.type === 'Sello' || card.isSello || !card.rarity;
+  const isToken = card.type === 'Token' || card.isToken;
   const banlistLimit = getBanlistLimit(card.id);
   const banlisted = banlistLimit !== undefined;
 
@@ -146,9 +149,22 @@ export function openCardInspector(cardId) {
       ? `<span class="inspector-badge" style="background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid #10b981;">🏛️ Sello (Sin Límite)</span>`
       : `<span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: #fbbf24; border: 1px solid #fbbf24;">💎 ${escapeHtml(card.rarity)}</span>`);
 
+  // Which deck the Add/Remove buttons act on. Toggling to Side always targets
+  // Side directly; the default (Main) keeps the existing "Main full -> add to
+  // Side instead" fallback used elsewhere in the app.
+  const targetLabel = target === 'side' ? 'Side Deck' : 'Mazo Principal';
+  const targetCount = target === 'side' ? currentInSide : currentInMain;
+  const addResolvedTarget = target === 'side'
+    ? 'side'
+    : (getDeckTotalCount('main') >= state.maxDeckSize ? 'side' : 'main');
+
   const addBtnText = isSello && !banlisted
-    ? `<span>+</span> Agregar al Mazo (x${currentInMain})`
-    : `<span>+</span> Agregar al Mazo (${currentCombined}/${maxCopies})`;
+    ? `<span>+</span> Agregar a ${targetLabel} (x${targetCount})`
+    : `<span>+</span> Agregar a ${targetLabel} (${currentCombined}/${maxCopies})`;
+  const removeBtnText = `<span>−</span> Quitar de ${targetLabel} (x${targetCount})`;
+
+  const canAdd = !isToken && canAddCardToDeck(card.id, addResolvedTarget).allowed;
+  const canRemove = !isToken && targetCount > 0;
 
   content.innerHTML = `
     <div class="inspector-card-col" id="inspector-card-container">
@@ -186,11 +202,20 @@ export function openCardInspector(cardId) {
         ${escapeHtml(card.flavor)}
       </div>
 
-      <div class="inspector-actions">
-        <button id="btn-inspector-add" class="btn btn-primary" ${!canAddCardToDeck(card.id, 'main').allowed ? 'disabled' : ''}>
-          ${addBtnText}
-        </button>
-      </div>
+      ${!isToken ? `
+        <div class="inspector-target-toggle" role="group" aria-label="Elegir mazo destino">
+          <button type="button" class="target-toggle-btn ${target === 'main' ? 'active' : ''}" data-target="main">Mazo Principal</button>
+          <button type="button" class="target-toggle-btn ${target === 'side' ? 'active' : ''}" data-target="side">Side Deck</button>
+        </div>
+        <div class="inspector-actions">
+          <button id="btn-inspector-remove" class="btn btn-secondary" ${!canRemove ? 'disabled' : ''}>
+            ${removeBtnText}
+          </button>
+          <button id="btn-inspector-add" class="btn btn-primary" ${!canAdd ? 'disabled' : ''}>
+            ${addBtnText}
+          </button>
+        </div>
+      ` : ''}
     </div>
   `;
 
@@ -209,15 +234,34 @@ export function openCardInspector(cardId) {
     });
   }
 
+  // Bind Main/Side Target Toggle
+  content.querySelectorAll('.target-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.target === target) return;
+      playClick();
+      openCardInspector(card.id, { target: btn.dataset.target });
+    });
+  });
+
   // Bind Add Button
   const addBtn = content.querySelector('#btn-inspector-add');
   if (addBtn) {
     addBtn.addEventListener('click', () => {
-      const result = addCardToDeck(card.id, 'main');
+      const result = addCardToDeck(card.id, addResolvedTarget);
       if (result.success) {
         playCardDrop();
-        openCardInspector(card.id);
+        openCardInspector(card.id, { target });
       }
+    });
+  }
+
+  // Bind Remove Button
+  const removeBtn = content.querySelector('#btn-inspector-remove');
+  if (removeBtn) {
+    removeBtn.addEventListener('click', () => {
+      removeCardFromDeck(card.id, false, target);
+      playCardRemove();
+      openCardInspector(card.id, { target });
     });
   }
 
