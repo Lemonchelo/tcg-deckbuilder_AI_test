@@ -796,6 +796,91 @@ function escapeHtml(value) {
     return text;
   }
 
+  // ── Official site format (export/import) ────────────────────────────────────
+  // Matches the format the official card game site produces when exporting a deck:
+  // section headers "Mazo principal" / "Sidedeck", cards grouped under "(Faccion)"
+  // headers (one per element present in that section), with the Sello of that
+  // faction listed first when present, followed by the rest of the cards sorted
+  // alphabetically. Faction headers use the plain element key, capitalized
+  // (no accents), e.g. "pluton" -> "(Pluton)", even though the card itself is
+  // named "Sello de Plutón".
+  function capitalizeFactionKey(key) {
+    if (!key) return 'Arcano';
+    return key.charAt(0).toUpperCase() + key.slice(1);
+  }
+
+  function buildOfficialSection(deckArr) {
+    const byFaction = new Map(); // elementKey -> { sello: {name,count}|null, others: [{name,count}] }
+
+    deckArr.forEach(item => {
+      const card = getCardById(item.cardId);
+      if (!card) return;
+      const key = card.element || 'neutral';
+      if (!byFaction.has(key)) byFaction.set(key, { sello: null, others: [] });
+      const group = byFaction.get(key);
+      if (card.isSello || card.type === 'Sello') {
+        group.sello = { name: card.name, count: item.count };
+      } else {
+        group.others.push({ name: card.name, count: item.count });
+      }
+    });
+
+    const factionKeys = [...byFaction.keys()].sort((a, b) =>
+      capitalizeFactionKey(a).localeCompare(capitalizeFactionKey(b), 'es', { sensitivity: 'base' })
+    );
+
+    return factionKeys.map(key => {
+      const group = byFaction.get(key);
+      const lines = [];
+      if (group.sello) lines.push(`${group.sello.name} x${group.sello.count}`);
+      group.others
+        .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }))
+        .forEach(c => lines.push(`${c.name} x${c.count}`));
+      return `(${capitalizeFactionKey(key)})\n${lines.join('\n')}`;
+    }).join('\n\n');
+  }
+
+  function exportDeckToOfficialFormat() {
+    let text = 'Mazo principal\n\n' + buildOfficialSection(state.deck);
+    if (state.sideDeck.length > 0) {
+      text += '\n\nSidedeck\n\n' + buildOfficialSection(state.sideDeck);
+    }
+    return text;
+  }
+
+  function importDeckFromOfficialFormat(textString) {
+    try {
+      const data = { deck: [], sideDeck: [] };
+      let section = 'main'; // 'main' | 'side' | 'extra'
+
+      for (const rawLine of textString.split('\n')) {
+        const line = rawLine.trim();
+        if (!line) continue;
+
+        if (/^mazo\s*principal$/i.test(line)) { section = 'main'; continue; }
+        if (/^side\s*deck$/i.test(line)) { section = 'side'; continue; }
+        if (/^mazo\s*extra$/i.test(line) || /^extra\s*deck$/i.test(line)) { section = 'extra'; continue; }
+        if (/^\(.+\)$/.test(line)) continue; // faction header, e.g. "(Mercurio)"
+        if (section === 'extra') continue;
+
+        const match = line.match(/^(.+)\s+x(\d+)$/i);
+        if (!match) throw new Error('Línea inválida: ' + line);
+        const name = match[1].trim();
+        const count = Number(match[2]);
+        if (!Number.isSafeInteger(count) || count <= 0) throw new Error('Cantidad inválida: ' + line);
+
+        const entry = { name, cardId: name, count };
+        if (section === 'side') data.sideDeck.push(entry);
+        else data.deck.push(entry);
+      }
+
+      if (!data.deck.length && !data.sideDeck.length) throw new Error('No se encontraron cartas en el texto.');
+      return importDeckFromJSON(JSON.stringify(data));
+    } catch (err) {
+      return { success: false, error: err.message, reason: err.message };
+    }
+  }
+
   // ── Saved decks (browser storage) ────────────────────────────────────────────
   // Named decks kept in localStorage so they can be saved and loaded without going through
   // export/import. Each entry stores the object exportDeckToJSON() produces and loading goes
@@ -1896,6 +1981,7 @@ function initCardInspector() {
         case 'cost-desc': return b.cost - a.cost || a.name.localeCompare(b.name);
         case 'name-asc': return a.name.localeCompare(b.name);
         case 'name-desc': return b.name.localeCompare(a.name);
+        case 'rarity-asc': return (RARITY_WEIGHT[a.rarity] || 0) - (RARITY_WEIGHT[b.rarity] || 0) || a.cost - b.cost;
         case 'rarity-desc': return (RARITY_WEIGHT[b.rarity] || 0) - (RARITY_WEIGHT[a.rarity] || 0) || a.cost - b.cost;
         case 'attack-desc': return (b.attack || 0) - (a.attack || 0) || a.cost - b.cost;
         case 'health-desc': return (b.health || 0) - (a.health || 0) || a.cost - b.cost;
@@ -2412,6 +2498,7 @@ function initCardInspector() {
 
     const textArea = document.getElementById('export-text-area');
     const jsonArea = document.getElementById('export-json-area');
+    const officialArea = document.getElementById('export-official-area');
     const tabButtons = modal ? modal.querySelectorAll('.tab-btn') : [];
 
     let currentTab = 'tab-text-deck';
@@ -2422,16 +2509,9 @@ function initCardInspector() {
         btn.classList.add('active');
         currentTab = btn.dataset.tab;
 
-        const tabText = document.getElementById('tab-text-deck');
-        const tabJson = document.getElementById('tab-json-deck');
-
-        if (currentTab === 'tab-text-deck') {
-          if (tabText) tabText.classList.add('active');
-          if (tabJson) tabJson.classList.remove('active');
-        } else {
-          if (tabText) tabText.classList.remove('active');
-          if (tabJson) tabJson.classList.add('active');
-        }
+        modal.querySelectorAll('.tab-content').forEach(tabEl => {
+          tabEl.classList.toggle('active', tabEl.id === currentTab);
+        });
         playClick();
       });
     });
@@ -2441,6 +2521,7 @@ function initCardInspector() {
         playClick();
         if (textArea) textArea.value = exportDeckToText();
         if (jsonArea) jsonArea.value = exportDeckToJSON();
+        if (officialArea) officialArea.value = exportDeckToOfficialFormat();
         if (modal) modal.classList.add('is-open');
       });
     }
@@ -2455,7 +2536,10 @@ function initCardInspector() {
     if (copyBtn) {
       copyBtn.addEventListener('click', async () => {
         playClick();
-        const contentToCopy = currentTab === 'tab-text-deck' ? (textArea ? textArea.value : '') : (jsonArea ? jsonArea.value : '');
+        let contentToCopy = '';
+        if (currentTab === 'tab-text-deck') contentToCopy = textArea ? textArea.value : '';
+        else if (currentTab === 'tab-json-deck') contentToCopy = jsonArea ? jsonArea.value : '';
+        else contentToCopy = officialArea ? officialArea.value : '';
         try {
           await navigator.clipboard.writeText(contentToCopy);
           showToast('¡Copiado al portapapeles con éxito!', 'success');
@@ -2471,8 +2555,10 @@ function initCardInspector() {
         let res;
         if (currentTab === 'tab-text-deck') {
           res = importDeckFromText(textArea ? textArea.value : '');
-        } else {
+        } else if (currentTab === 'tab-json-deck') {
           res = importDeckFromJSON(jsonArea ? jsonArea.value : '');
+        } else {
+          res = importDeckFromOfficialFormat(officialArea ? officialArea.value : '');
         }
 
         if (res.success) {

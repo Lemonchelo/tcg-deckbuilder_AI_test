@@ -239,7 +239,7 @@
         <!-- Sidebar Header with Card Count -->
         <div class="library-header">
           <div class="library-title-row">
-            <h2 class="section-title" title="Clic: ver detalle · Clic derecho o arrastrar: agregar al mazo">Biblioteca de Cartas</h2>
+            <h2 class="section-title" title="Clic: ver detalle · Clic derecho o arrastrar: agregar al mazo">Colección</h2>
             <div class="library-count-badge" id="library-count-badge">
               Mostrando <span id="filtered-card-count">0</span> / <span id="total-card-count">0</span>
             </div>
@@ -346,7 +346,8 @@
                   <option value="cost-desc">Coste (Mayor a Menor)</option>
                   <option value="name-asc">Nombre (A - Z)</option>
                   <option value="name-desc">Nombre (Z - A)</option>
-                  <option value="rarity-desc">Rareza</option>
+                  <option value="rarity-asc">Rareza (Menor a Mayor)</option>
+                  <option value="rarity-desc">Rareza (Mayor a Menor)</option>
                   <option value="attack-desc">Ataque</option>
                   <option value="health-desc">Vida</option>
                 </select>
@@ -522,12 +523,16 @@
           <div class="tabs-header">
             <button class="tab-btn active" data-tab="tab-text-deck">Lista de Texto</button>
             <button class="tab-btn" data-tab="tab-json-deck">Código JSON</button>
+            <button class="tab-btn" data-tab="tab-official-deck">Formato Oficial</button>
           </div>
           <div class="tab-content active" id="tab-text-deck">
             <textarea id="export-text-area" class="code-textarea" rows="10" placeholder="Pega tu lista de cartas aquí..."></textarea>
           </div>
           <div class="tab-content" id="tab-json-deck">
             <textarea id="export-json-area" class="code-textarea" rows="10" placeholder="Pega el código JSON del mazo aquí..."></textarea>
+          </div>
+          <div class="tab-content" id="tab-official-deck">
+            <textarea id="export-official-area" class="code-textarea" rows="10" placeholder="Pega aquí el mazo exportado desde la página oficial..."></textarea>
           </div>
         </div>
         <div class="modal-footer">

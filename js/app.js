@@ -3,7 +3,7 @@ import { escapeHtml } from './cardsData.js';
  * AETHERIUM TCG DECKBUILDER - APPLICATION BOOTSTRAP
  */
 
-import { state, loadInitialState, subscribeToDeck, subscribeToFilters, subscribeToBanlist, clearDeck, exportDeckToText, exportDeckToJSON, importDeckFromText, importDeckFromJSON } from './state.js';
+import { state, loadInitialState, subscribeToDeck, subscribeToFilters, subscribeToBanlist, clearDeck, exportDeckToText, exportDeckToJSON, exportDeckToOfficialFormat, importDeckFromText, importDeckFromJSON, importDeckFromOfficialFormat } from './state.js';
 import { initCardInspector } from './cardInspector.js';
 import { initDeckView, renderDeck } from './deckManager.js';
 import { initFilters, renderLibrary } from './filterManager.js';
@@ -139,6 +139,7 @@ function initExportImportModal() {
 
   const textArea = document.getElementById('export-text-area');
   const jsonArea = document.getElementById('export-json-area');
+  const officialArea = document.getElementById('export-official-area');
 
   const tabButtons = modal ? modal.querySelectorAll('.tab-btn') : [];
 
@@ -151,16 +152,9 @@ function initExportImportModal() {
       btn.classList.add('active');
       currentTab = btn.dataset.tab;
 
-      const tabText = document.getElementById('tab-text-deck');
-      const tabJson = document.getElementById('tab-json-deck');
-
-      if (currentTab === 'tab-text-deck') {
-        if (tabText) tabText.classList.add('active');
-        if (tabJson) tabJson.classList.remove('active');
-      } else {
-        if (tabText) tabText.classList.remove('active');
-        if (tabJson) tabJson.classList.add('active');
-      }
+      modal.querySelectorAll('.tab-content').forEach(tabEl => {
+        tabEl.classList.toggle('active', tabEl.id === currentTab);
+      });
       playClick();
     });
   });
@@ -171,6 +165,7 @@ function initExportImportModal() {
       playClick();
       if (textArea) textArea.value = exportDeckToText();
       if (jsonArea) jsonArea.value = exportDeckToJSON();
+      if (officialArea) officialArea.value = exportDeckToOfficialFormat();
       if (modal) modal.classList.add('is-open');
     });
   }
@@ -187,9 +182,10 @@ function initExportImportModal() {
   if (copyBtn) {
     copyBtn.addEventListener('click', async () => {
       playClick();
-      const contentToCopy = currentTab === 'tab-text-deck' 
-        ? (textArea ? textArea.value : '') 
-        : (jsonArea ? jsonArea.value : '');
+      let contentToCopy = '';
+      if (currentTab === 'tab-text-deck') contentToCopy = textArea ? textArea.value : '';
+      else if (currentTab === 'tab-json-deck') contentToCopy = jsonArea ? jsonArea.value : '';
+      else contentToCopy = officialArea ? officialArea.value : '';
 
       try {
         await navigator.clipboard.writeText(contentToCopy);
@@ -200,7 +196,7 @@ function initExportImportModal() {
     });
   }
 
-  // Import / Load Deck from Text/JSON
+  // Import / Load Deck from Text/JSON/Official Format
   if (applyBtn) {
     applyBtn.addEventListener('click', () => {
       playClick();
@@ -208,9 +204,12 @@ function initExportImportModal() {
       if (currentTab === 'tab-text-deck') {
         const text = textArea ? textArea.value : '';
         res = importDeckFromText(text);
-      } else {
+      } else if (currentTab === 'tab-json-deck') {
         const json = jsonArea ? jsonArea.value : '';
         res = importDeckFromJSON(json);
+      } else {
+        const official = officialArea ? officialArea.value : '';
+        res = importDeckFromOfficialFormat(official);
       }
 
       if (res.success) {
