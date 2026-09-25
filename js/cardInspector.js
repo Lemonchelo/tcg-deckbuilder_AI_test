@@ -2,7 +2,7 @@
  * 3D HOLOGRAPHIC TILT & FULL-CARD RENDERING / INSPECTOR
  */
 
-import { getCardById, ELEMENTS, escapeHtml } from './cardsData.js';
+import { getCardById, ELEMENTS, escapeHtml, renderElementIcon } from './cardsData.js';
 import { addCardToDeck, canAddCardToDeck, getCardCountInDeck, getCombinedCardCount, getMaxAllowedCopies, getBanlistLimit, isCardBanlisted } from './state.js';
 import { playClick, playCardDrop } from './sound.js';
 
@@ -159,7 +159,7 @@ export function openCardInspector(cardId) {
       <div class="inspector-name">${escapeHtml(card.name)}</div>
       <div class="inspector-meta-row">
         <span class="inspector-badge" style="background: ${elementInfo.glow}; color: #ffffff; border: 1px solid ${elementInfo.color};">
-          ${elementInfo.icon} ${elementInfo.name}
+          ${renderElementIcon(card.element)} ${elementInfo.name}
         </span>
         <span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: var(--text-secondary); border: 1px solid var(--border-medium);">
           ${escapeHtml(card.type)}

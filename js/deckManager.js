@@ -5,7 +5,7 @@
  */
 
 import { state, removeCardFromDeck, getDeckTotalCount, setDeckName, getActiveExtraDeckTokens } from './state.js';
-import { getCardById, ELEMENTS } from './cardsData.js';
+import { getCardById, ELEMENTS, renderElementIcon } from './cardsData.js';
 import { createCardElement, openCardInspector } from './cardInspector.js';
 import { renderManaCurve } from './manaCurve.js';
 import { playCardRemove } from './sound.js';
@@ -313,7 +313,7 @@ function updateDeckComposition() {
         dotDiv.className = 'elem-dot-item';
         dotDiv.title = `${info ? info.name : elemKey}: ${count} cartas en el mazo`;
         dotDiv.innerHTML = `
-          <span class="elem-dot ${elemKey}"></span>
+          ${renderElementIcon(elemKey)}
           <span>${count}</span>
         `;
         elementDotsContainer.appendChild(dotDiv);

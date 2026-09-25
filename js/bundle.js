@@ -23,16 +23,23 @@ function escapeHtml(value) {
   // 1. CARDS DATA & CONSTANTS
   // ==========================================================================
   const ELEMENTS = {
-    marte: { name: 'Marte', icon: '🔴', color: '#ef4444', glow: 'rgba(239, 68, 68, 0.45)' },
-    neptuno: { name: 'Neptuno', icon: '🔵', color: '#38bdf8', glow: 'rgba(56, 189, 248, 0.45)' },
-    jupiter: { name: 'Júpiter', icon: '🟠', color: '#f59e0b', glow: 'rgba(245, 158, 11, 0.45)' },
-    tierra: { name: 'Tierra', icon: '🟢', color: '#10b981', glow: 'rgba(16, 185, 129, 0.45)' },
-    saturno: { name: 'Saturno', icon: '🪐', color: '#a855f7', glow: 'rgba(168, 85, 247, 0.45)' },
-    mercurio: { name: 'Mercurio', icon: '⚪', color: '#cbd5e1', glow: 'rgba(203, 213, 225, 0.45)' },
+    marte: { iconSrc: 'assets/factions/marte.png', name: 'Marte', icon: '🔴', color: '#ef4444', glow: 'rgba(239, 68, 68, 0.45)' },
+    neptuno: { iconSrc: 'assets/factions/neptuno.png', name: 'Neptuno', icon: '🔵', color: '#38bdf8', glow: 'rgba(56, 189, 248, 0.45)' },
+    jupiter: { iconSrc: 'assets/factions/jupiter.png', name: 'Júpiter', icon: '🟠', color: '#f59e0b', glow: 'rgba(245, 158, 11, 0.45)' },
+    tierra: { iconSrc: 'assets/factions/tierra.png', name: 'Tierra', icon: '🟢', color: '#10b981', glow: 'rgba(16, 185, 129, 0.45)' },
+    saturno: { iconSrc: 'assets/factions/saturno.png', name: 'Saturno', icon: '🪐', color: '#a855f7', glow: 'rgba(168, 85, 247, 0.45)' },
+    mercurio: { iconSrc: 'assets/factions/mercurio.png', name: 'Mercurio', icon: '⚪', color: '#cbd5e1', glow: 'rgba(203, 213, 225, 0.45)' },
     urano: { name: 'Urano', icon: '💠', color: '#06b6d4', glow: 'rgba(6, 182, 212, 0.45)' },
-    pluton: { name: 'Plutón', icon: '🌌', color: '#ec4899', glow: 'rgba(236, 72, 153, 0.45)' },
+    pluton: { iconSrc: 'assets/factions/pluton.png', name: 'Plutón', icon: '🌌', color: '#ec4899', glow: 'rgba(236, 72, 153, 0.45)' },
     neutral: { name: 'Arcano', icon: '🔮', color: '#94a3b8', glow: 'rgba(148, 163, 184, 0.3)' }
   };
+
+  function renderElementIcon(elementKey) {
+    const element = ELEMENTS[elementKey] || ELEMENTS.neutral;
+    return element.iconSrc
+      ? `<img class="faction-icon" src="${element.iconSrc}" alt="" width="20" height="20" draggable="false">`
+      : element.icon;
+  }
 
   const CARD_TYPES = [
     { id: 'all', label: 'Todos' },
@@ -83,7 +90,9 @@ function escapeHtml(value) {
       <text x="125" y="36" font-family="'Cinzel', serif" font-size="11.5" font-weight="800" fill="#ffffff" text-anchor="middle">${name}</text>
 
       <!-- Planet Symbol -->
-      <text x="222" y="36" font-size="14" text-anchor="middle">${elem.icon}</text>
+      ${elem.iconSrc
+      ? `<image href="${elem.iconSrc}" x="212" y="21" width="20" height="20"/>`
+      : `<text x="222" y="36" font-size="14" text-anchor="middle">${elem.icon}</text>`}
 
       <!-- Central Art Window -->
       <rect x="16" y="54" width="218" height="155" rx="8" fill="#060913" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
@@ -1178,7 +1187,7 @@ function escapeHtml(value) {
         <div class="inspector-name">${escapeHtml(card.name)}</div>
         <div class="inspector-meta-row">
           <span class="inspector-badge" style="background: ${elementInfo.glow}; color: #ffffff; border: 1px solid ${elementInfo.color};">
-            ${elementInfo.icon} ${elementInfo.name}
+            ${renderElementIcon(card.element)} ${elementInfo.name}
           </span>
           <span class="inspector-badge" style="background: rgba(255,255,255,0.06); color: var(--text-secondary); border: 1px solid var(--border-medium);">
             ${escapeHtml(card.type)}
@@ -1681,7 +1690,7 @@ function initCardInspector() {
         badge.className = 'planet-dot-badge';
         badge.style.background = info.glow;
         badge.style.borderColor = info.color;
-        badge.innerHTML = `${info.icon} ${info.name}: <strong>${count}</strong>`;
+        badge.innerHTML = `${renderElementIcon(planetKey)} ${info.name}: <strong>${count}</strong>`;
         dotsContainer.appendChild(badge);
       });
     }
