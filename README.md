@@ -376,3 +376,5 @@ Ejecutá `node tests/regression.cjs` para comprobar, tanto en los módulos como 
 Con Playwright disponible y Microsoft Edge instalado, `node tests/browser.cjs` verifica la importación del catálogo, los cierres del inspector, la persistencia, los límites y la selección de cartas en la mano. Usa un perfil aislado. La variable opcional `SCREENSHOT_PATH` permite guardar una captura del detalle.
 
 La identidad visual es STG TCG Deckbuilder. Se mantienen las claves históricas de almacenamiento y el identificador de exportación para conservar la compatibilidad con las colecciones y mazos existentes.
+
+El tema visual de `css/rog-theme.css` está inspirado en [Rise of Gods](https://www.riseofgodstcg.store/): fondos azul noche, acciones coral, controles redondeados y tipografía del sistema disponible sin conexión. Se carga después de los estilos de componentes; mantiene los colores de facción y rareza. En pantallas de hasta 760 px, la biblioteca queda debajo del constructor y la página permite desplazamiento vertical.

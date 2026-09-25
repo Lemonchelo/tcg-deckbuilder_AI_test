@@ -6,10 +6,7 @@
   <title>STG TCG Deckbuilder</title>
   <meta name="description" content="Creador de mazos para TCG con Facciones Planetarias, Sellos, Mazo Extra de Tokens automático y Drag and Drop.">
   
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <!-- System fonts keep the visual theme available offline. -->
   
   <!-- CSS Stylesheets -->
   <link rel="stylesheet" href="css/main.css">
@@ -18,6 +15,7 @@
   <link rel="stylesheet" href="css/library-sidebar.css">
   <link rel="stylesheet" href="css/card.css">
   <link rel="stylesheet" href="css/modals.css">
+  <link rel="stylesheet" href="css/rog-theme.css">
 </head>
 <body class="theme-dark">
   <div id="app-container" class="app-layout">
@@ -25,7 +23,7 @@
     <!-- TOP NAVIGATION BAR -->
     <header class="top-navbar" id="top-navbar">
       <div class="nav-brand">
-        <div class="brand-logo-gem">
+        <div class="brand-logo-gem" aria-hidden="true">
           <div class="gem-inner"></div>
         </div>
         <div class="brand-text">
