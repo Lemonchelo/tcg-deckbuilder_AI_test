@@ -286,7 +286,7 @@ function updateDeckComposition() {
   };
 
   let elementCounts = {
-    marte: 0, neptuno: 0, jupiter: 0, tierra: 0, saturno: 0, mercurio: 0, urano: 0, pluton: 0, neutral: 0
+    marte: 0, neptuno: 0, jupiter: 0, tierra: 0, saturno: 0, mercurio: 0, pluton: 0, neutral: 0
   };
 
   state.deck.forEach(item => {

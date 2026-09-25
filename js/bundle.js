@@ -29,7 +29,6 @@ function escapeHtml(value) {
     tierra: { iconSrc: 'assets/factions/tierra.png', name: 'Tierra', icon: '🟢', color: '#10b981', glow: 'rgba(16, 185, 129, 0.45)' },
     saturno: { iconSrc: 'assets/factions/saturno.png', name: 'Saturno', icon: '🪐', color: '#a855f7', glow: 'rgba(168, 85, 247, 0.45)' },
     mercurio: { iconSrc: 'assets/factions/mercurio.png', name: 'Mercurio', icon: '⚪', color: '#cbd5e1', glow: 'rgba(203, 213, 225, 0.45)' },
-    urano: { name: 'Urano', icon: '💠', color: '#06b6d4', glow: 'rgba(6, 182, 212, 0.45)' },
     pluton: { iconSrc: 'assets/factions/pluton.png', name: 'Plutón', icon: '🌌', color: '#ec4899', glow: 'rgba(236, 72, 153, 0.45)' },
     neutral: { name: 'Arcano', icon: '🔮', color: '#94a3b8', glow: 'rgba(148, 163, 184, 0.3)' }
   };
@@ -245,7 +244,6 @@ function escapeHtml(value) {
     tierra: 'tierra', earth: 'tierra', terra: 'tierra', verde: 'tierra', green: 'tierra', naturaleza: 'tierra',
     saturno: 'saturno', saturn: 'saturno', morado: 'saturno', violeta: 'saturno', purple: 'saturno',
     mercurio: 'mercurio', mercury: 'mercurio', plata: 'mercurio', plateado: 'mercurio', silver: 'mercurio', gris: 'mercurio',
-    urano: 'urano', uranus: 'urano', cian: 'urano', celeste: 'urano', cyan: 'urano', hielo: 'urano',
     pluton: 'pluton', plutón: 'pluton', pluto: 'pluton', vacio: 'pluton', vacío: 'pluton', sombra: 'pluton', negro: 'pluton',
     arcano: 'neutral', neutral: 'neutral', incoloro: 'neutral', colorless: 'neutral'
   };

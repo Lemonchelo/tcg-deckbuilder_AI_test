@@ -10,4 +10,4 @@ Archivos originales de https://www.riseofgodstcg.store/facciones, descargados el
 - `mercurio.png`: https://riseofgodstcg.store/uploads/factions/mercurio_icon.png?v=1780318660242
 - `pluton.png`: https://riseofgodstcg.store/uploads/factions/pluton_icon.png
 
-Urano y Arcano conservan sus símbolos anteriores: no aparecen entre las siete facciones de la página de origen.
+Arcano (neutral) conserva su símbolo anterior: no aparece entre las siete facciones de la página de origen.
