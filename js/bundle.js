@@ -1234,8 +1234,24 @@ function escapeHtml(value) {
     wrapper.addEventListener('dragstart', reset);
   }
 
+  // Ids of the cards in whichever list (Mazo Principal / Side / Extra / Colección)
+  // the inspector was opened from, in the same order they're shown there — used
+  // so the nav arrows know what "previous"/"next" means. Main/Side/Extra are
+  // recomputed live from state every render; Colección's filtered+sorted list is
+  // supplied by the caller as `contextIds`, since it depends on the active
+  // search/filter/sort — passed forward unchanged across toggle/add/remove/nav
+  // re-renders of the same inspector session.
+  function getContextCardIds(context, providedIds) {
+    switch (context) {
+      case 'main': return state.deck.map(item => item.cardId);
+      case 'side': return state.sideDeck.map(item => item.cardId);
+      case 'extra': return getActiveExtraDeckTokens().map(token => token.id);
+      default: return Array.isArray(providedIds) ? providedIds : [];
+    }
+  }
+
   function openCardInspector(cardId, options = {}) {
-    const { target = 'main' } = options;
+    const { target = 'main', context = 'library', contextIds: providedContextIds = null } = options;
     const card = getCardById(cardId);
     if (!card) return;
 
@@ -1244,6 +1260,11 @@ function escapeHtml(value) {
     if (!modal || !content) return;
 
     playClick();
+
+    const contextIds = getContextCardIds(context, providedContextIds);
+    const contextIndex = contextIds.indexOf(card.id);
+    const hasPrev = contextIndex > 0;
+    const hasNext = contextIndex !== -1 && contextIndex < contextIds.length - 1;
 
     const elementInfo = ELEMENTS[card.element] || ELEMENTS.neutral;
     const currentInMain = getCardCountInDeck(card.id, 'main');
@@ -1344,7 +1365,7 @@ function escapeHtml(value) {
       btn.addEventListener('click', () => {
         if (btn.dataset.target === target) return;
         playClick();
-        openCardInspector(card.id, { target: btn.dataset.target });
+        openCardInspector(card.id, { target: btn.dataset.target, context, contextIds: providedContextIds });
       });
     });
 
@@ -1354,7 +1375,7 @@ function escapeHtml(value) {
         const result = addCardToDeck(card.id, addResolvedTarget);
         if (result.success) {
           playCardDrop();
-          openCardInspector(card.id, { target });
+          openCardInspector(card.id, { target, context, contextIds: providedContextIds });
         }
       });
     }
@@ -1364,8 +1385,25 @@ function escapeHtml(value) {
       removeBtn.addEventListener('click', () => {
         removeCardFromDeck(card.id, false, target);
         playCardRemove();
-        openCardInspector(card.id, { target });
+        openCardInspector(card.id, { target, context, contextIds: providedContextIds });
       });
+    }
+
+    const prevBtn = document.getElementById('btn-inspector-prev');
+    const nextBtn = document.getElementById('btn-inspector-next');
+    if (prevBtn) {
+      prevBtn.disabled = !hasPrev;
+      prevBtn.onclick = () => {
+        if (!hasPrev) return;
+        openCardInspector(contextIds[contextIndex - 1], { target, context, contextIds: providedContextIds });
+      };
+    }
+    if (nextBtn) {
+      nextBtn.disabled = !hasNext;
+      nextBtn.onclick = () => {
+        if (!hasNext) return;
+        openCardInspector(contextIds[contextIndex + 1], { target, context, contextIds: providedContextIds });
+      };
     }
 
     if (!modal.classList.contains('is-open')) modal.returnFocus = document.activeElement;
@@ -1529,7 +1567,7 @@ function initCardInspector() {
       if (!cardWrapper) return;
       const cardId = cardWrapper.dataset.cardId;
       if (!cardId) return;
-      openCardInspector(cardId, { target });
+      openCardInspector(cardId, { target, context: target });
     });
 
     // Right click on a card: remove 1 copy from this deck
@@ -1581,7 +1619,7 @@ function initCardInspector() {
       extraDeckGrid.addEventListener('click', (e) => {
         const cardWrapper = e.target.closest('.tcg-card-wrapper');
         if (cardWrapper && cardWrapper.dataset.cardId) {
-          openCardInspector(cardWrapper.dataset.cardId);
+          openCardInspector(cardWrapper.dataset.cardId, { context: 'extra' });
         }
       });
     }
@@ -1934,7 +1972,7 @@ function initCardInspector() {
       libraryGrid.addEventListener('click', (e) => {
         const cardWrapper = e.target.closest('.tcg-card-wrapper');
         if (cardWrapper && cardWrapper.dataset.cardId) {
-          openCardInspector(cardWrapper.dataset.cardId);
+          openCardInspector(cardWrapper.dataset.cardId, { context: 'library', contextIds: getVisibleLibraryCardIds() });
         }
       });
 
@@ -1978,14 +2016,7 @@ function initCardInspector() {
     Common: 1
   };
 
-  function renderLibrary() {
-    const libraryGrid = document.getElementById('library-grid');
-    const emptyState = document.getElementById('library-empty');
-    const filteredCountElem = document.getElementById('filtered-card-count');
-    const totalCountElem = document.getElementById('total-card-count');
-
-    if (!libraryGrid) return;
-
+  function getFilteredSortedCards() {
     const { search, element, type, rarity, maxMana, sort } = state.filters;
 
     let filtered = CARDS_DATA.filter(card => {
@@ -2027,6 +2058,26 @@ function initCardInspector() {
         default: return 0;
       }
     });
+
+    return filtered;
+  }
+
+  // Exposes the Colección grid's current filtered + sorted card ids, in the same
+  // order they're rendered in, so the inspector's prev/next navigation can walk
+  // through exactly what the user is looking at.
+  function getVisibleLibraryCardIds() {
+    return getFilteredSortedCards().map(card => card.id);
+  }
+
+  function renderLibrary() {
+    const libraryGrid = document.getElementById('library-grid');
+    const emptyState = document.getElementById('library-empty');
+    const filteredCountElem = document.getElementById('filtered-card-count');
+    const totalCountElem = document.getElementById('total-card-count');
+
+    if (!libraryGrid) return;
+
+    const filtered = getFilteredSortedCards();
 
     const nonTokenTotal = CARDS_DATA.filter(c => c.type !== 'Token' && !c.isToken).length;
     if (totalCountElem) totalCountElem.textContent = nonTokenTotal;

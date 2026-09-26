@@ -455,12 +455,14 @@
 
     <!-- MODAL: CARD INSPECTOR (3D HD VIEW) -->
     <div class="modal-backdrop" id="modal-card-inspector">
+      <button class="inspector-nav-btn inspector-nav-prev" id="btn-inspector-prev" type="button" aria-label="Carta anterior">&#10094;</button>
       <div class="modal-dialog modal-inspector" role="dialog" aria-modal="true" aria-label="Detalle de carta">
         <button class="modal-close-btn" id="btn-close-inspector" type="button" aria-label="Cerrar detalle">&times;</button>
         <div class="inspector-content" id="inspector-content">
           <!-- Populated dynamically by JS with 3D card and lore -->
         </div>
       </div>
+      <button class="inspector-nav-btn inspector-nav-next" id="btn-inspector-next" type="button" aria-label="Carta siguiente">&#10095;</button>
     </div>
 
     <!-- MODAL: CARD FULLSCREEN ZOOM (reached by clicking the card inside the inspector) -->

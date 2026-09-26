@@ -305,6 +305,47 @@
   text-shadow: 0 0 8px var(--cyan-glow-sm);
 }
 
+/* ── Inspector Prev/Next Navigation ─────────────────────────────────────── */
+.inspector-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1px solid var(--border-soft);
+  background: rgba(10, 14, 26, 0.85);
+  color: var(--cyan);
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+  transition: all var(--t-fast);
+}
+
+.inspector-nav-btn:hover:not(:disabled) {
+  background: rgba(0, 245, 255, 0.15);
+  border-color: var(--cyan);
+  box-shadow: var(--cyan-glow-sm);
+}
+
+.inspector-nav-btn:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.inspector-nav-prev { left: 16px; }
+.inspector-nav-next { right: 16px; }
+
+@media (max-width: 720px) {
+  .inspector-nav-btn { width: 40px; height: 40px; font-size: 16px; }
+  .inspector-nav-prev { left: 6px; }
+  .inspector-nav-next { right: 6px; }
+}
+
 /* ==========================================================================
    TEST HAND SIMULATOR MODAL
    ========================================================================== */

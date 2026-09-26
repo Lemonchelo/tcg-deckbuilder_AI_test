@@ -39,7 +39,7 @@ export function initDeckView() {
     extraDeckGrid.addEventListener('click', (e) => {
       const cardWrapper = e.target.closest('.tcg-card-wrapper');
       if (cardWrapper && cardWrapper.dataset.cardId) {
-        openCardInspector(cardWrapper.dataset.cardId);
+        openCardInspector(cardWrapper.dataset.cardId, { context: 'extra' });
       }
     });
   }
@@ -54,7 +54,7 @@ function setupDeckGridInteractions(gridEl, target) {
     if (!cardWrapper) return;
     const cardId = cardWrapper.dataset.cardId;
     if (!cardId) return;
-    openCardInspector(cardId, { target });
+    openCardInspector(cardId, { target, context: target });
   });
 
   // Right click on a card: remove 1 copy from this deck
